@@ -23,6 +23,14 @@
   "homepage": "https://mjvo.github.io/slidev-addon-p5",
   "packageManager": "pnpm@10.29.2",
   "main": "index.ts",
+  "files": [
+    "components/**/*.vue",
+    "setup/**/*.ts",
+    "types/**/*.ts",
+    "index.ts",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build:demo": "node ./setup/prepare-dev-slides.mjs && slidev build ./slides.dev.md --base /slidev-addon-p5/ --out dist",
     "check": "tsc -p tsconfig.json",
