@@ -1,0 +1,60 @@
+{
+  "name": "slidev-addon-p5",
+  "version": "1.0.0",
+  "description": "p5.js integration for Slidev with auto-detection, instance mode transpilation, and accurate mouse tracking",
+  "keywords": [
+    "slidev-addon",
+    "slidev",
+    "p5",
+    "p5js",
+    "interactive",
+    "sketches",
+    "canvas"
+  ],
+  "author": "Mark JV Olson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mjvo/slidev-addon-p5.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mjvo/slidev-addon-p5/issues"
+  },
+  "homepage": "https://mjvo.github.io/slidev-addon-p5",
+  "packageManager": "pnpm@10.29.2",
+  "main": "index.ts",
+  "scripts": {
+    "build:demo": "node ./setup/prepare-dev-slides.mjs && slidev build ./slides.dev.md --base /slidev-addon-p5/ --out dist",
+    "check": "tsc -p tsconfig.json",
+    "dev:slidev": "node ./setup/prepare-dev-slides.mjs && pnpm exec slidev ./slides.dev.md",
+    "lint": "eslint . --ext .ts,.vue --max-warnings=0",
+    "lint:fix": "eslint . --ext .ts,.vue --fix",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install",
+    "test:unit": "vitest run tests/unit",
+    "test:all": "pnpm run test:unit && pnpm run test:e2e"
+  },
+  "dependencies": {
+    "acorn": "^8.11.0",
+    "acorn-walk": "^8.3.0",
+    "astring": "^1.8.6",
+    "loop-protect": "^2.1.6"
+  },
+  "peerDependencies": {
+    "@slidev/types": ">=0.47.0",
+    "vue": ">=3.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@slidev/cli": "^52.11.5",
+    "@slidev/theme-default": "^0.25.0",
+    "@slidev/types": "latest",
+    "@types/node": "^20.19.33",
+    "@typescript-eslint/eslint-plugin": "^6.7.0",
+    "@typescript-eslint/parser": "^6.7.0",
+    "eslint": "^8.52.0",
+    "eslint-plugin-vue": "^9.16.0",
+    "jsdom": "^27.4.0",
+    "vitest": "^1.0.0"
+  }
+}
