@@ -102,15 +102,17 @@ function setup() { createCanvas(300, 300); }
 
 ## Notes and limits
 
+- Threat model: trusted-only slide content. This addon assumes the slide author controls code fences passed to `<P5Canvas>` / `<P5Code>`.
 - p5 snippets are detected via `setup()` patterns in the code runner path.
 - If p5 in an iframe is still loading, first Run can fail; run again once ready.
 - Keep code inside `<P5Canvas>` or `<P5Code>` slots for correct extraction/execution.
+- Non-p5 code is delegated to Slidev's JS runner when available. If unavailable, the addon returns an error instead of executing code locally.
+- Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
 
 ## TODO
 
 - Add an example of including p5.js as an imported code snippet.
 - Investigate/resolve Vite circular chunk warning involving Monaco + Shiki (`monaco/bundled-types` ↔ `modules/shiki`) to reduce bundle risk.
-- Rework non-p5 runner fallback in `setup/code-runners.ts` to remove direct `eval` usage (or document the threat model more explicitly).
 
 ## Contributing (developers)
 

@@ -1,8 +1,13 @@
 # slidev-addon-p5 Architecture
 
-Last updated: 2026-02-11
+Last updated: 2026-02-14
 
 This document describes how `slidev-addon-p5` works today.
+
+## Threat Model
+
+- The addon assumes trusted-only slide content.
+- Code fences provided to `<P5Canvas>` and `<P5Code>` are treated as author-controlled input.
 
 ## Purpose
 
@@ -23,6 +28,7 @@ Both components use iframe-based execution (DOM fallback is removed).
 
 - `index.ts`: addon entry; default export is `setup/code-runners.ts`.
 - `setup/code-runners.ts`: Slidev code-runner integration, p5 detection, transpile + iframe execution, console output bridge, stop button wiring.
+- `setup/iframe-bootstrap.ts`: shared iframe HTML bootstrap and background/theme resolution used by both components.
 - `setup/p5-transpile.ts`: AST transform from p5 global mode to instance mode (`_p`).
 - `setup/iframe-message-handler.ts`: secure postMessage routing with origin checks and message-type handlers.
 - `setup/iframe-resize-handler.ts`: throttled resize handling from iframe messages.
@@ -54,7 +60,7 @@ Both components use iframe-based execution (DOM fallback is removed).
 ### 3. Non-p5 JavaScript flow
 
 If code does not match p5 detection, runner delegates to Slidev's JS runner when available.
-If no delegate is available, a local fallback path executes JavaScript directly (`eval`) with console capture.
+If no delegate is available, runner returns an explicit error and does not execute code locally.
 
 ## Messaging Contract
 
@@ -65,6 +71,8 @@ Messages emitted from iframe include:
 
 Handler behavior:
 - validates origin,
+- validates message source (`event.source`) against the owning iframe when configured,
+- requires and/or pins `sketchInstanceId` where configured,
 - routes by message type,
 - throttles resize updates,
 - ignores stale sketch IDs where applicable.
@@ -84,6 +92,8 @@ Typical transform:
 
 - Old p5 instances are removed before rerun.
 - Iframe container content is reset between executions.
+- Observer-based cleanup is deterministic per iframe run: prior cleanup observers are disconnected before new ones are registered.
+- Cleanup observers self-remove after firing and are disconnected on explicit teardown.
 - `safeRemoveP5` / `safeRemoveElement` are used to avoid double-removal and cross-realm teardown issues.
 - Unmount removes message listeners and component-level resources.
 
@@ -106,11 +116,9 @@ Precedence:
 
 - p5 detection is heuristic (`setup()`-based), not a full semantic classifier.
 - First run can race iframe/library readiness in some environments.
-- Non-p5 fallback still contains a direct-eval path when runner delegation is unavailable.
 
 ## Practical Extension Points
 
 - Improve p5 detection signal beyond `setup()` regex.
-- Remove/replace non-p5 `eval` fallback path.
 - Expand tests for race conditions around iframe readiness and sketch ID pairing.
 - Add additional documented examples for custom p5 source loading patterns.

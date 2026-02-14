@@ -44,6 +44,12 @@ pnpm run test:e2e
 pnpm run test:all
 ```
 
+Contributor guardrails
+- Do not add local `eval` / `new Function` execution fallbacks for runner code paths.
+- Keep iframe bootstrap HTML/theme/background logic centralized in `setup/iframe-bootstrap.ts` (avoid reintroducing duplicate inline bootstrap blocks).
+- Iframe postMessage payloads should include `sketchInstanceId`, and handlers should remain scoped by source window + sketch ID.
+- If you change message contracts (`p5-iframe-ready`, `p5-resize`, `p5-error`), update both component/runtime code and corresponding E2E tests in `tests/e2e/`.
+
 Debugging Playwright E2E failures
 - Reproduce with trace and headed mode to capture video and full trace:
 
