@@ -35,6 +35,7 @@ try {
 }
 /* eslint-enable @typescript-eslint/no-var-requires */
 import { getP5LoadUrl } from '../setup/p5-version-manager'
+import { buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
@@ -64,185 +65,18 @@ function initializeIframe() {
   if (!iframeElement.value) return
   const doc = iframeElement.value.contentDocument || iframeElement.value.contentWindow?.document
   if (!doc) return
-  // Find the #slide-content element for background detection
-  let slideEl = document.getElementById('slide-content')
-  const htmlRoot = document.documentElement
-  // Initial theme guess from Slidev root classes
-  let theme = 'light'
-  if (htmlRoot.classList.contains('slidev-theme-dark')) theme = 'dark'
-  if (htmlRoot.classList.contains('slidev-theme-light')) theme = 'light'
-
-  // Helpers: parse simple color formats (hex, rgb, rgba) and resolve CSS vars
-  const parseColor = (input: string | null): { r: number; g: number; b: number; a: number } | null => {
-    if (!input) return null
-    let s = input.trim().toLowerCase()
-    // handle CSS var references like var(--foo)
-    const varMatch = s.match(/^var\((--[a-z0-9-_]+)\)$/i)
-    if (varMatch) {
-      const val = getComputedStyle(htmlRoot).getPropertyValue(varMatch[1]).trim()
-      if (val) s = val.toLowerCase()
-    }
-    // rgb/rgba
-    const rgbMatch = s.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\s*\)/)
-    if (rgbMatch) {
-      return {
-        r: Number(rgbMatch[1]),
-        g: Number(rgbMatch[2]),
-        b: Number(rgbMatch[3]),
-        a: rgbMatch[4] !== undefined ? Number(rgbMatch[4]) : 1,
-      }
-    }
-    // hex #rrggbb or #rgb
-    const hexMatch = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
-    if (hexMatch) {
-      let hex = hexMatch[1]
-      if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('')
-      const intVal = parseInt(hex, 16)
-      return {
-        r: (intVal >> 16) & 255,
-        g: (intVal >> 8) & 255,
-        b: intVal & 255,
-        a: 1,
-      }
-    }
-    // named colors / other formats are not handled here
-    return null
-  }
-
-  const composite = (fg: { r: number; g: number; b: number; a: number }, bg: { r: number; g: number; b: number; a: number }) => {
-    const fa = fg.a
-    const ba = bg.a
-    const outA = fa + ba * (1 - fa)
-    if (outA === 0) return { r: 0, g: 0, b: 0, a: 0 }
-    const r = (fg.r * fa + bg.r * ba * (1 - fa)) / outA
-    const g = (fg.g * fa + bg.g * ba * (1 - fa)) / outA
-    const b = (fg.b * fa + bg.b * ba * (1 - fa)) / outA
-    return { r, g, b, a: outA }
-  }
-
-  // Walk up DOM to resolve layered backgrounds and composite alpha
-  const resolveBackground = (el: Element | null): { r: number; g: number; b: number; a: number } | null => {
-    let curr: Element | null = el
-    let accumulated: { r: number; g: number; b: number; a: number } | null = null
-    while (curr && curr.nodeType === 1) {
-      try {
-        const style = getComputedStyle(curr as Element)
-        let bg = style.backgroundColor || style.background || ''
-        bg = bg && bg !== 'initial' ? bg : ''
-        let parsed = parseColor(bg || null)
-        // if background is provided via CSS variable (e.g. --bg)
-        if ((!parsed || parsed.a === 0) && typeof style.getPropertyValue === 'function') {
-          const varNames = ['--slide-background','--slidev-background','--background','--bg','--background-color','--vp-background']
-          for (const name of varNames) {
-            const val = style.getPropertyValue(name)
-            if (val) {
-              parsed = parseColor(val.trim())
-              if (parsed) break
-            }
-          }
-        }
-        if (parsed) {
-          parsed.a = parsed.a ?? 1
-          if (!accumulated) {
-            accumulated = parsed
-          } else {
-            accumulated = composite(parsed, accumulated)
-          }
-          // if fully opaque, we can stop
-          if (accumulated.a >= 0.999) break
-        }
-      } catch (e) {
-        // ignore and continue up
-      }
-      curr = curr.parentElement
-    }
-    return accumulated
-  }
-
-  let resolved = null as { r: number; g: number; b: number; a: number } | null
-  if (slideEl) {
-    const style = getComputedStyle(slideEl)
-    const direct = parseColor(style.backgroundColor || style.background || null)
-    if (direct && direct.a && direct.a > 0) {
-      resolved = direct
-    } else {
-      // try common CSS vars then walk ancestors
-      const varNames = ['--slide-background','--slidev-background','--background','--bg','--background-color','--vp-background']
-      for (const name of varNames) {
-        const val = style.getPropertyValue(name)
-        if (val) {
-          const p = parseColor(val.trim())
-          if (p && p.a > 0) { resolved = p; break }
-        }
-      }
-      if (!resolved) resolved = resolveBackground(slideEl)
-    }
-  }
-
-  if (!resolved) {
-    resolved = theme === 'dark' ? { r: 24, g: 24, b: 26, a: 1 } : { r: 255, g: 255, b: 255, a: 1 }
-  }
-
-  // Final computed background as rgba string
-  const computedBg = `rgba(${Math.round(resolved.r)}, ${Math.round(resolved.g)}, ${Math.round(resolved.b)}, ${Number(resolved.a.toFixed(3))})`
-  // Update theme guess from resolved background luminance
-  const luminance = (0.2126 * resolved.r + 0.7152 * resolved.g + 0.0722 * resolved.b) / 255
-  theme = luminance < 0.5 ? 'dark' : 'light'
+  const { computedBg, theme } = computeIframeBackgroundTheme({ preferredElementId: 'slide-content' })
   const p5LoadUrl = getP5LoadUrl({ version: props.p5Version, cdnUrl: props.p5CdnUrl })
   sketchInstanceId.value = createSketchId()
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="${p5LoadUrl}"><\/script>
-      <style>
-        html, body { margin: 0; padding: 0; overflow: hidden; background: ${computedBg}; display: flex; justify-content: center; align-items: center; }
-        canvas { display: block; }
-        #p5-container { display: flex; justify-content: center; align-items: center; }
-      </style>
-    </head>
-    <body>
-        <div id="p5-container"></div>
-        <script>
-        window.__p5Addon = {};
-        window.__p5Addon.logs = [];
-        window.__p5Addon.sketchInstanceId = '${sketchInstanceId.value}';
-        window.__p5Addon.theme = '${theme}';
-        let lastWidth = 0;
-        let lastHeight = 0;
-        const parentOrigin = (function(){
-          try {
-            if (document.referrer) return new URL(document.referrer).origin;
-            if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) return window.location.ancestorOrigins[0];
-          } catch (e) {
-            void 0
-          }
-          return window.location.origin;
-        })();
-
-        const resizeIframe = () => {
-          const canvas = document.querySelector('canvas');
-          if (canvas) {
-            const width = canvas.offsetWidth + 4;
-            const height = canvas.offsetHeight + 4;
-            if (width > 10 && height > 10 && (width !== lastWidth || height !== lastHeight)) {
-              lastWidth = width;
-              lastHeight = height;
-              window.parent.postMessage({ type: 'p5-resize', width: width, height: height, sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
-            }
-          }
-        };
-        const observer = new MutationObserver(() => { setTimeout(resizeIframe, 100); });
-        observer.observe(document.body, { childList: true, subtree: true });
-        setInterval(resizeIframe, 500);
-        window.parent.postMessage({ type: 'p5-iframe-ready', sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
-        window.parent.postMessage({ type: 'p5-iframe-ready', sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
-      <\/script>
-    </body>
-    </html>
-  `
+  const html = buildP5IframeHtml({
+    computedBg,
+    theme,
+    sketchInstanceId: sketchInstanceId.value,
+    p5ScriptUrl: p5LoadUrl,
+    includeThemeOnAddon: true,
+    readyMessageCount: 2,
+    requirePositiveCanvasSize: true,
+  })
   doc.open()
   doc.write(html)
   doc.close()

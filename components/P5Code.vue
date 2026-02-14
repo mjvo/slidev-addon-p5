@@ -42,6 +42,7 @@ import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { getP5LoadUrl } from '../setup/p5-version-manager'
 import { safeRemoveP5 } from '../setup/p5-utils'
+import { buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { nextTick } from 'vue'
 
 // Dynamic require for loop-protect to avoid bundler/runtime issues in some setups
@@ -62,8 +63,6 @@ interface Props {
   p5Version?: string   // Specific p5.js version to load (e.g., '2.2.0', '2.1.0')
   p5CdnUrl?: string    // Custom CDN URL for p5.js (overrides version if set)
 }
-
-type Color = { r: number; g: number; b: number; a: number }
 
 const props = withDefaults(defineProps<Props>(), {
   displayOnly: false,
@@ -160,185 +159,18 @@ const initializeIframe = () => {
     version: props.p5Version,
     cdnUrl: props.p5CdnUrl,
   })
-
-  // Robust background detection (supports CSS vars + alpha compositing)
-  const htmlRoot = document.documentElement;
-  const parseColor = (input: string | null): Color | null => {
-    if (!input) return null
-    let s = input.trim().toLowerCase()
-    const varMatch = s.match(/^var\((--[a-z0-9-_]+)\)$/i)
-    if (varMatch) {
-      const val = getComputedStyle(htmlRoot).getPropertyValue(varMatch[1]).trim()
-      if (val) s = val.toLowerCase()
-    }
-    const rgbMatch = s.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\s*\)/)
-    if (rgbMatch) {
-      return { r: Number(rgbMatch[1]), g: Number(rgbMatch[2]), b: Number(rgbMatch[3]), a: rgbMatch[4] !== undefined ? Number(rgbMatch[4]) : 1 }
-    }
-    const hexMatch = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
-    if (hexMatch) {
-      let hex = hexMatch[1]
-      if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('')
-      const intVal = parseInt(hex, 16)
-      return { r: (intVal >> 16) & 255, g: (intVal >> 8) & 255, b: intVal & 255, a: 1 }
-    }
-    return null
-  }
-
-  const composite = (fg: Color, bg: Color): Color => {
-    const fa = fg.a
-    const ba = bg.a
-    const outA = fa + ba * (1 - fa)
-    if (outA === 0) return { r: 0, g: 0, b: 0, a: 0 }
-    const r = (fg.r * fa + bg.r * ba * (1 - fa)) / outA
-    const g = (fg.g * fa + bg.g * ba * (1 - fa)) / outA
-    const b = (fg.b * fa + bg.b * ba * (1 - fa)) / outA
-    return { r, g, b, a: outA }
-  }
-
-  const resolveBackground = (el: Element | null): Color | null => {
-    let curr: Element | null = el
-    let accumulated: Color | null = null
-    const varNames = ['--slide-background','--slidev-background','--background','--bg','--background-color','--vp-background']
-    while (curr && curr.nodeType === 1) {
-      try {
-        const style = getComputedStyle(curr as Element)
-        let bg = style.backgroundColor || style.background || ''
-        bg = bg && bg !== 'initial' ? bg : ''
-        let parsed = parseColor(bg || null)
-        if ((!parsed || parsed.a === 0) && typeof style.getPropertyValue === 'function') {
-          for (const name of varNames) {
-            const val = style.getPropertyValue(name)
-            if (val) {
-              parsed = parseColor(val.trim())
-              if (parsed) break
-            }
-          }
-        }
-        if (parsed) {
-          parsed.a = parsed.a ?? 1
-          if (!accumulated) accumulated = parsed
-          else accumulated = composite(parsed, accumulated)
-          if (accumulated.a >= 0.999) break
-        }
-      } catch (e) {
-        // ignore and continue
-      }
-      curr = curr.parentElement
-    }
-    return accumulated
-  }
-
-  const computeBackground = (): { computedBg: string; theme: 'dark' | 'light' } => {
-    let themeGuess = 'light'
-    if (htmlRoot.classList.contains('slidev-theme-dark')) themeGuess = 'dark'
-    if (htmlRoot.classList.contains('slidev-theme-light')) themeGuess = 'light'
-    const slideContainer = document.querySelector('.slidev-page, .slidev-page-main, .slidev-page-content')
-    let resolved: Color | null = null
-    if (slideContainer) {
-      const style = getComputedStyle(slideContainer)
-      const direct = parseColor(style.backgroundColor || style.background || null)
-      if (direct && direct.a && direct.a > 0) resolved = direct
-      else {
-        for (const name of ['--slide-background','--slidev-background','--background','--bg','--background-color','--vp-background']) {
-          const val = style.getPropertyValue(name)
-          if (val) {
-            const p = parseColor(val.trim())
-            if (p && p.a > 0) { resolved = p; break }
-          }
-        }
-        if (!resolved) resolved = resolveBackground(slideContainer)
-      }
-    }
-    if (!resolved) resolved = themeGuess === 'dark' ? { r: 24, g: 24, b: 26, a: 1 } : { r: 255, g: 255, b: 255, a: 1 }
-    const computedBg = `rgba(${Math.round(resolved.r)}, ${Math.round(resolved.g)}, ${Math.round(resolved.b)}, ${Number(resolved.a.toFixed(3))})`
-    const luminance = (0.2126 * resolved.r + 0.7152 * resolved.g + 0.0722 * resolved.b) / 255
-    const theme = luminance < 0.5 ? 'dark' : 'light'
-    return { computedBg, theme }
-  }
-
-  const { computedBg, theme } = computeBackground()
-
-  // Build HTML content with p5.js and minimal styling, using detected background
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <script src="${p5LoadUrl}"><\/script>
-      <style>
-        html, body {
-          margin: 0;
-          padding: 0;
-          overflow: hidden;
-          background: ${computedBg};
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          color: ${theme === 'dark' ? '#eee' : '#222'};
-        }
-        canvas {
-          display: block;
-        }
-        #p5-container {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-      </style>
-    </head>
-    <body>
-      <div id="p5-container"></div>
-      <script>
-        window.__p5Addon = {};
-        window.__p5Addon.logs = [];
-        window.__p5Addon.originalLog = window.console.log.bind(console);
-        window.__p5Addon.originalError = window.console.error.bind(console);
-        window.__p5Addon.originalWarn = window.console.warn.bind(console);
-        window.__p5Addon.sketchInstanceId = '${sketchInstanceId.value}';
-        window.__p5Addon.theme = '${theme}';
-        //window.__p5Addon.originalLog('[p5 iframe] Console capture enabled - wrapper active');
-        let lastWidth = 0;
-        let lastHeight = 0;
-        const parentOrigin = (function(){
-          try {
-            if (document.referrer) return new URL(document.referrer).origin;
-            if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) return window.location.ancestorOrigins[0];
-          } catch (e) {
-            // ignore and fallback
-          }
-          return window.location.origin;
-        })();
-
-        const resizeIframe = () => {
-          const canvas = document.querySelector('canvas');
-          if (canvas) {
-            const width = canvas.offsetWidth + 4;
-            const height = canvas.offsetHeight + 4;
-            if (width !== lastWidth || height !== lastHeight) {
-              lastWidth = width;
-              lastHeight = height;
-              // window.__p5Addon.originalLog('[p5 iframe resize] Detected canvas ' + width + 'x' + height + ', sending message to parent');
-              window.parent.postMessage({ 
-                type: 'p5-resize', 
-                width: width, 
-                height: height,
-                sketchInstanceId: window.__p5Addon.sketchInstanceId
-              }, parentOrigin);
-            }
-          }
-        };
-        const observer = new MutationObserver(() => {
-          setTimeout(resizeIframe, 100);
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        setInterval(resizeIframe, 500);
-        window.parent.postMessage({ type: 'p5-iframe-ready', sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
-      <\/script>
-    </body>
-    </html>
-  `
+  const { computedBg, theme } = computeIframeBackgroundTheme({
+    preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
+  })
+  const html = buildP5IframeHtml({
+    computedBg,
+    theme,
+    sketchInstanceId: sketchInstanceId.value,
+    p5ScriptUrl: p5LoadUrl,
+    includeOriginalConsole: true,
+    includeThemeOnAddon: true,
+    includeBodyTextColor: true,
+  })
 
   doc.open()
   doc.write(html)
@@ -388,178 +220,15 @@ const executeInIframe = async (code: string) => {
   // This ensures a clean state, especially when navigating between slides
   // The iframe document persists across slide navigation, so we need to reset it
   const doc = iframeWindow.value.document;
-  const { computedBg: _computedBg } = (function(): { computedBg: string; theme: 'dark' | 'light' } {
-    const htmlRoot = document.documentElement
-    const parseColor = (input: string | null): Color | null => {
-      if (!input) return null
-      let s = input.trim().toLowerCase()
-      const varMatch = s.match(/^var\((--[a-z0-9-_]+)\)$/i)
-      if (varMatch) {
-        const val = getComputedStyle(htmlRoot).getPropertyValue(varMatch[1]).trim()
-        if (val) s = val.toLowerCase()
-      }
-      const rgbMatch = s.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\s*\)/)
-      if (rgbMatch) {
-        return { r: Number(rgbMatch[1]), g: Number(rgbMatch[2]), b: Number(rgbMatch[3]), a: rgbMatch[4] !== undefined ? Number(rgbMatch[4]) : 1 }
-      }
-      const hexMatch = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
-      if (hexMatch) {
-        let hex = hexMatch[1]
-        if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('')
-        const intVal = parseInt(hex, 16)
-        return { r: (intVal >> 16) & 255, g: (intVal >> 8) & 255, b: intVal & 255, a: 1 }
-      }
-      return null
-    }
-    const composite = (fg: Color, bg: Color): Color => {
-      const fa = fg.a
-      const ba = bg.a
-      const outA = fa + ba * (1 - fa)
-      if (outA === 0) return { r: 0, g: 0, b: 0, a: 0 }
-      const r = (fg.r * fa + bg.r * ba * (1 - fa)) / outA
-      const g = (fg.g * fa + bg.g * ba * (1 - fa)) / outA
-      const b = (fg.b * fa + bg.b * ba * (1 - fa)) / outA
-      return { r, g, b, a: outA }
-    }
-    const resolveBackground = (el: Element | null): Color | null => {
-      let curr: Element | null = el
-      let accumulated: Color | null = null
-      const varNames = ['--slide-background','--slidev-background','--background','--bg','--background-color','--vp-background']
-      while (curr && curr.nodeType === 1) {
-        try {
-          const style = getComputedStyle(curr as Element)
-          let bg = style.backgroundColor || style.background || ''
-          bg = bg && bg !== 'initial' ? bg : ''
-          let parsed = parseColor(bg || null)
-          if ((!parsed || parsed.a === 0) && typeof style.getPropertyValue === 'function') {
-            for (const name of varNames) {
-              const val = style.getPropertyValue(name)
-              if (val) {
-                parsed = parseColor(val.trim())
-                if (parsed) break
-              }
-            }
-          }
-          if (parsed) {
-            parsed.a = parsed.a ?? 1
-            if (!accumulated) accumulated = parsed
-            else accumulated = composite(parsed, accumulated)
-            if (accumulated.a >= 0.999) break
-          }
-        } catch (e) {
-          // ignore and continue
-        }
-        curr = curr.parentElement
-      }
-      return accumulated
-    }
-    const slideContainer = document.querySelector('.slidev-page, .slidev-page-main, .slidev-page-content')
-    let resolved: Color | null = null
-    if (slideContainer) {
-      const style = getComputedStyle(slideContainer)
-      const direct = parseColor(style.backgroundColor || style.background || null)
-      if (direct && direct.a && direct.a > 0) resolved = direct
-      else {
-        for (const name of ['--slide-background','--slidev-background','--background','--bg','--background-color','--vp-background']) {
-          const val = style.getPropertyValue(name)
-          if (val) {
-            const p = parseColor(val.trim())
-            if (p && p.a > 0) { resolved = p; break }
-          }
-        }
-        if (!resolved) resolved = resolveBackground(slideContainer)
-      }
-    }
-    if (!resolved) {
-      const htmlRoot = document.documentElement
-      const themeGuess = htmlRoot.classList.contains('slidev-theme-dark') ? 'dark' : 'light'
-      resolved = themeGuess === 'dark' ? { r: 24, g: 24, b: 26, a: 1 } : { r: 255, g: 255, b: 255, a: 1 }
-    }
-    const computedBg = `rgba(${Math.round(resolved.r)}, ${Math.round(resolved.g)}, ${Math.round(resolved.b)}, ${Number(resolved.a.toFixed(3))})`
-    const luminance = (0.2126 * resolved.r + 0.7152 * resolved.g + 0.0722 * resolved.b) / 255
-    const theme = luminance < 0.5 ? 'dark' : 'light'
-    return { computedBg, theme }
-  })()
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        html, body {
-          margin: 0;
-          padding: 0;
-          overflow: hidden;
-          background: ${_computedBg};
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-        canvas {
-          display: block;
-        }
-        #p5-container {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-      </style>
-    </head>
-    <body>
-      <div id="p5-container"></div>
-      <script>
-        window.__p5Addon = {};
-        window.__p5Addon.logs = [];
-        window.__p5Addon.originalLog = window.console.log.bind(console);
-        window.__p5Addon.originalError = window.console.error.bind(console);
-        window.__p5Addon.originalWarn = window.console.warn.bind(console);
-        window.__p5Addon.sketchInstanceId = '${sketchInstanceId.value}';
-
-        let lastWidth = 0;
-        let lastHeight = 0;
-        const parentOrigin = (function(){
-          try {
-            if (document.referrer) return new URL(document.referrer).origin;
-            if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) return window.location.ancestorOrigins[0];
-          } catch (e) {
-            // ignore and fallback
-          }
-          return window.location.origin;
-        })();
-
-        const resizeIframe = () => {
-          const canvas = document.querySelector('canvas');
-          if (canvas) {
-            const width = canvas.offsetWidth + 4;
-            const height = canvas.offsetHeight + 4;
-            
-            if (width !== lastWidth || height !== lastHeight) {
-              lastWidth = width;
-              lastHeight = height;
-              // window.__p5Addon.originalLog('[p5 iframe resize] Detected canvas ' + width + 'x' + height + ', sending message to parent');
-              window.parent.postMessage({ 
-                type: 'p5-resize', 
-                width: width, 
-                height: height,
-                sketchInstanceId: window.__p5Addon.sketchInstanceId,
-              }, parentOrigin);
-            }
-          }
-        };
-
-        const observer = new MutationObserver(() => {
-          setTimeout(resizeIframe, 100);
-        });
-        
-        observer.observe(document.body, { childList: true, subtree: true });
-        setInterval(resizeIframe, 500);
-
-        window.parent.postMessage({ type: 'p5-iframe-ready', sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
-      <\/script>
-    </body>
-    </html>
-  `
+  const { computedBg, theme } = computeIframeBackgroundTheme({
+    preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
+  })
+  const html = buildP5IframeHtml({
+    computedBg,
+    theme,
+    sketchInstanceId: sketchInstanceId.value,
+    includeOriginalConsole: true,
+  })
 
   doc.open()
   doc.write(html)
