@@ -23,6 +23,10 @@ type CleanupCallback = () => void;
 export class CleanupManager {
   private observers: Array<IntersectionObserver | MutationObserver> = [];
 
+  private removeObserver(observer: IntersectionObserver | MutationObserver): void {
+    this.observers = this.observers.filter((obs) => obs !== observer);
+  }
+
   /**
    * Start observing an element for visibility changes
    *
@@ -43,14 +47,22 @@ export class CleanupManager {
       return;
     }
 
+    let handled = false;
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
+        if (handled) return;
+        for (const entry of entries) {
           if (!entry.isIntersecting) {
-            callback();
-            observer.disconnect();
+            handled = true;
+            try {
+              callback();
+            } finally {
+              observer.disconnect();
+              this.removeObserver(observer);
+            }
+            return;
           }
-        });
+        }
       },
       { threshold: 0 }
     );
@@ -80,18 +92,21 @@ export class CleanupManager {
       return;
     }
 
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        mutation.removedNodes.forEach((node) => {
-          if (node === target || (node instanceof HTMLElement && node.contains(target))) {
-            callback();
-            observer.disconnect();
-          }
-        });
-      });
+    let handled = false;
+    const observer = new MutationObserver(() => {
+      if (handled) return;
+      if (!target.isConnected || !parent.contains(target)) {
+        handled = true;
+        try {
+          callback();
+        } finally {
+          observer.disconnect();
+          this.removeObserver(observer);
+        }
+      }
     });
 
-    observer.observe(parent, { childList: true });
+    observer.observe(parent, { childList: true, subtree: true });
     this.observers.push(observer);
   }
 

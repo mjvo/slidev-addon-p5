@@ -16,7 +16,10 @@ export interface ExecuteInIframeResult {
 
 export type JsRunnerCtx = Parameters<NonNullable<RunnerType['js']>>[1];
 
-export type IframeElementLike = HTMLIFrameElement & { __messageHandler?: { reset?: () => void } };
+export type IframeElementLike = HTMLIFrameElement & {
+  __messageHandler?: { reset?: () => void };
+  __cleanupManager?: { disconnectAll?: () => void };
+};
 import { defineCodeRunnersSetup } from "@slidev/types";
 import { transpileGlobalToInstance } from "./p5-transpile";
 // loop-protect is used to instrument user code to guard against infinite loops
@@ -159,6 +162,20 @@ const scheduleFallbackResize = (
   };
 
   delays.forEach((delay) => setTimeout(sendResize, delay));
+};
+
+const disconnectIframeCleanupManager = (iframeElement: IframeElementLike): void => {
+  const manager = iframeElement.__cleanupManager;
+  if (!manager) return;
+  try {
+    if (typeof manager.disconnectAll === 'function') {
+      manager.disconnectAll();
+    }
+  } catch (e) {
+    // ignore teardown errors
+  } finally {
+    delete iframeElement.__cleanupManager;
+  }
 };
 
 /**
@@ -509,9 +526,15 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
         // Extract stop button controller and log element for cleanup
         const stopButtonController = iframeResult.stopButtonController;
         const logElement = iframeResult.element;
-        // Set up cleanup when iframe leaves viewport
+        // Replace any previous observer set for this iframe before registering new ones.
+        const trackedIframe = iframeElement as IframeElementLike;
+        disconnectIframeCleanupManager(trackedIframe);
         const cleanupManager = new CleanupManager();
-        cleanupManager.observeVisibility(iframeElement, () => {
+        trackedIframe.__cleanupManager = cleanupManager;
+        let cleanedUp = false;
+        const performRunCleanup = () => {
+          if (cleanedUp) return;
+          cleanedUp = true;
           try {
             const iw = iframeElement.contentWindow as IframeWindowWithAddon | null;
             if (iw?.p5?.instance) {
@@ -537,20 +560,22 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
             }
           } catch (e) {
             // Silently handle cleanup errors
-          }
-        });
-        
-        // Also clean up if iframe is removed from DOM
-        cleanupManager.observeMutation(document.body, iframeElement, () => {
-          try {
-            const iw = iframeElement.contentWindow as IframeWindowWithAddon | null;
-            if (iw?.p5?.instance) {
-              safeRemoveP5(iw.p5.instance);
+          } finally {
+            try {
+              cleanupManager.disconnectAll();
+            } catch (e) {
+              // ignore teardown errors
             }
-          } catch (e) {
-            // Silently handle cleanup errors
+            if (trackedIframe.__cleanupManager === cleanupManager) {
+              delete trackedIframe.__cleanupManager;
+            }
           }
-        });
+        };
+        // Set up cleanup when iframe leaves viewport
+        cleanupManager.observeVisibility(iframeElement, performRunCleanup);
+        // Also clean up if iframe is removed from DOM
+        const mutationParent = (iframeElement.ownerDocument?.body || document.body) as HTMLElement | null;
+        cleanupManager.observeMutation(mutationParent, iframeElement, performRunCleanup);
         
         if (iframeResult.element) {
           return { element: iframeResult.element };
