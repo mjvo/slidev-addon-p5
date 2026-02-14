@@ -71,9 +71,31 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   await page.waitForTimeout(500)
 
   // Simulate an iframe reporting an error for this sketchInstanceId
-  await page.evaluate((sketchId) => {
-    window.postMessage({ type: 'p5-error', sketchInstanceId: sketchId, error: 'Simulated runtime error' }, window.location.origin)
-  }, id)
+  let iframeLocator = id
+    ? page.locator(`iframe.p5-canvas-iframe[data-p5code-id="${id}"]`).first()
+    : page.locator('iframe.p5-canvas-iframe:visible').first()
+  if (await iframeLocator.count() === 0) {
+    iframeLocator = page.locator('iframe.p5-canvas-iframe[data-p5code-id]').first()
+  }
+  if (await iframeLocator.count() === 0) {
+    iframeLocator = page.locator('iframe.p5-canvas-iframe').first()
+  }
+  await iframeLocator.waitFor({ state: 'attached', timeout: 20_000 })
+  const effectiveSketchId = id || await iframeLocator.getAttribute('data-p5code-id')
+  if (!effectiveSketchId) {
+    throw new Error('Unable to determine sketchInstanceId for error-ui test')
+  }
+  const iframeHandle = await iframeLocator.elementHandle()
+  if (!iframeHandle) {
+    throw new Error('Unable to resolve iframe handle for error-ui test')
+  }
+  const frame = await iframeHandle.contentFrame()
+  if (!frame) {
+    throw new Error('Unable to access iframe content frame for error-ui test')
+  }
+  await frame.evaluate((sketchId) => {
+    window.parent.postMessage({ type: 'p5-error', sketchInstanceId: sketchId, error: 'Simulated runtime error' }, window.location.origin)
+  }, effectiveSketchId)
 
   // Assert error UI appears (allow extra time for UI injection)
   const err = page.locator('.p5-error-boundary .message').first()

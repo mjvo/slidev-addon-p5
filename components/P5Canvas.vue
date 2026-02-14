@@ -406,6 +406,8 @@ onMounted(() => {
     resizeHandler = new IframeResizeHandler({
       allowedOrigins: [window.location.origin],
       sketchInstanceId: sketchInstanceId.value,
+      expectedSource: () => iframeElement.value?.contentWindow ?? null,
+      requireSketchInstanceId: true,
       onResize: (width, height, incomingSketchId) => {
         if (incomingSketchId && incomingSketchId !== sketchInstanceId.value) {
           return;
@@ -425,6 +427,9 @@ onMounted(() => {
     try {
       messageHandler = new IframeMessageHandler({
         allowedOrigins: [window.location.origin],
+        expectedSource: () => iframeElement.value?.contentWindow ?? null,
+        requireSketchInstanceId: true,
+        expectedSketchInstanceId: () => sketchInstanceId.value,
         onError: (data) => {
           try {
             const d = data as { sketchInstanceId?: string; error?: unknown; message?: unknown } | null

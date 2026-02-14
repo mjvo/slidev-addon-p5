@@ -32,6 +32,12 @@ interface MessageHandlerConfig {
   onExecutionComplete?: () => void;
   // Optional list of allowed origins for messages (overrides default)
   allowedOrigins?: string[];
+  // Optional source constraint to bind messages to a specific iframe window
+  expectedSource?: MessageEventSource | null | (() => MessageEventSource | null);
+  // Enforce that messages include sketchInstanceId
+  requireSketchInstanceId?: boolean;
+  // Optionally pin accepted messages to one sketch ID
+  expectedSketchInstanceId?: string | (() => string | undefined);
 }
 
 /**
@@ -58,6 +64,9 @@ export class IframeMessageHandler {
   private lastResizeTime = 0;
   private pendingResize?: { width: number; height: number };
   private pendingTimeout?: number;
+  private expectedSource?: MessageEventSource | null | (() => MessageEventSource | null);
+  private requireSketchInstanceId = false;
+  private expectedSketchInstanceId?: string | (() => string | undefined);
 
   /**
    * Create a new iframe message handler
@@ -79,7 +88,24 @@ export class IframeMessageHandler {
     if (config.allowedOrigins && Array.isArray(config.allowedOrigins) && config.allowedOrigins.length > 0) {
       this.allowedOrigins = config.allowedOrigins;
     }
+    this.expectedSource = config.expectedSource;
+    this.requireSketchInstanceId = Boolean(config.requireSketchInstanceId);
+    this.expectedSketchInstanceId = config.expectedSketchInstanceId;
     this.registerHandlers(config);
+  }
+
+  private resolveExpectedSource(): MessageEventSource | null {
+    if (typeof this.expectedSource === 'function') {
+      return this.expectedSource();
+    }
+    return this.expectedSource ?? null;
+  }
+
+  private resolveExpectedSketchInstanceId(): string | undefined {
+    if (typeof this.expectedSketchInstanceId === 'function') {
+      return this.expectedSketchInstanceId();
+    }
+    return this.expectedSketchInstanceId;
   }
 
   /**
@@ -207,10 +233,26 @@ export class IframeMessageHandler {
       return;
     }
 
+    const expectedSource = this.resolveExpectedSource();
+    if (expectedSource && event.source !== expectedSource) {
+      return;
+    }
+
     // Basic shape validation: require an object with a string `type` field
     const data = event.data;
     if (!data || typeof data !== 'object' || typeof data.type !== 'string') {
       // Ignore non-structured postMessage events without spamming the console.
+      return;
+    }
+
+    const incomingSketchId = typeof (data as { sketchInstanceId?: unknown }).sketchInstanceId === 'string'
+      ? (data as { sketchInstanceId: string }).sketchInstanceId
+      : undefined;
+    const expectedSketchId = this.resolveExpectedSketchInstanceId();
+    if (this.requireSketchInstanceId && !incomingSketchId) {
+      return;
+    }
+    if (expectedSketchId && incomingSketchId !== expectedSketchId) {
       return;
     }
 

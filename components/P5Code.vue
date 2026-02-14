@@ -514,6 +514,7 @@ const executeInIframe = async (code: string) => {
         window.__p5Addon.originalLog = window.console.log.bind(console);
         window.__p5Addon.originalError = window.console.error.bind(console);
         window.__p5Addon.originalWarn = window.console.warn.bind(console);
+        window.__p5Addon.sketchInstanceId = '${sketchInstanceId.value}';
 
         let lastWidth = 0;
         let lastHeight = 0;
@@ -540,7 +541,8 @@ const executeInIframe = async (code: string) => {
               window.parent.postMessage({ 
                 type: 'p5-resize', 
                 width: width, 
-                height: height 
+                height: height,
+                sketchInstanceId: window.__p5Addon.sketchInstanceId,
               }, parentOrigin);
             }
           }
@@ -553,7 +555,7 @@ const executeInIframe = async (code: string) => {
         observer.observe(document.body, { childList: true, subtree: true });
         setInterval(resizeIframe, 500);
 
-        window.parent.postMessage({ type: 'p5-iframe-ready' }, parentOrigin);
+        window.parent.postMessage({ type: 'p5-iframe-ready', sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
       <\/script>
     </body>
     </html>
@@ -640,6 +642,8 @@ onMounted(() => {
   resizeHandler = new IframeResizeHandler({
     allowedOrigins: [window.location.origin],
     sketchInstanceId: sketchInstanceId.value,
+    expectedSource: () => iframeElement.value?.contentWindow ?? null,
+    requireSketchInstanceId: true,
     onResize: (width, height, incomingSketchId) => {
       if (incomingSketchId && incomingSketchId !== sketchInstanceId.value) {
         console.log('[P5Code] Ignoring resize for old sketchInstanceId', incomingSketchId, 'current:', sketchInstanceId.value);
@@ -681,6 +685,9 @@ onMounted(() => {
       // Code execution completed
     },
     allowedOrigins: [window.location.origin],
+    expectedSource: () => iframeElement.value?.contentWindow ?? null,
+    requireSketchInstanceId: true,
+    expectedSketchInstanceId: () => sketchInstanceId.value,
   })
   // Store message handler reference on iframe element for code-runners.ts access
   if (iframeElement.value) {

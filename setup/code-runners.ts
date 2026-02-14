@@ -419,29 +419,9 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
       if (runner && runner.js) {
         return runner.js(code, ctx as unknown as JsRunnerCtx);
       }
-      // Fallback if no default runner
-      const logs: string[] = [];
-      const originalLog = console.log;
-      const originalError = console.error;
-      const originalWarn = console.warn;
-      try {
-        console.log = (...args) => { logs.push(args.join(' ')); originalLog(...args); };
-        console.error = (...args) => { logs.push('Error: ' + args.join(' ')); originalError(...args); };
-        console.warn = (...args) => { logs.push('Warning: ' + args.join(' ')); originalWarn(...args); };
-
-        const result = eval(code);
-        if (result !== undefined) {
-          logs.push(String(result));
-        }
-        return { text: logs.join('\n') || 'Code executed successfully' };
-      } catch (error: unknown) {
-        const msg = (error as { message?: unknown } | null)?.message;
-        return { text: `Error: ${typeof msg === 'string' ? msg : String(error)}` };
-      } finally {
-        console.log = originalLog;
-        console.error = originalError;
-        console.warn = originalWarn;
-      }
+      return {
+        text: 'Error: No default JavaScript runner is available for non-p5 code. This addon only executes p5 sketches.',
+      };
     }
     
     // p5.js code detected - transpile and execute

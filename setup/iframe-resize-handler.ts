@@ -7,6 +7,8 @@ export interface IframeResizeHandlerOptions {
   onResize: (width: number, height: number, sketchId?: string) => void;
   throttleMs?: number;
   sketchInstanceId?: string;
+  expectedSource?: MessageEventSource | null | (() => MessageEventSource | null);
+  requireSketchInstanceId?: boolean;
 }
 
 
@@ -19,6 +21,8 @@ export class IframeResizeHandler {
   private pendingTimeout: number | null = null;
   private listener: (event: MessageEvent) => void;
   private sketchInstanceId?: string;
+  private expectedSource?: MessageEventSource | null | (() => MessageEventSource | null);
+  private requireSketchInstanceId = false;
 
   constructor(options: IframeResizeHandlerOptions) {
     this.allowedOrigins = options.allowedOrigins || [window.location.origin];
@@ -26,6 +30,15 @@ export class IframeResizeHandler {
     this.throttleMs = options.throttleMs ?? 150;
     this.listener = this.handleMessage.bind(this);
     this.sketchInstanceId = options.sketchInstanceId;
+    this.expectedSource = options.expectedSource;
+    this.requireSketchInstanceId = Boolean(options.requireSketchInstanceId);
+  }
+
+  private resolveExpectedSource(): MessageEventSource | null {
+    if (typeof this.expectedSource === 'function') {
+      return this.expectedSource();
+    }
+    return this.expectedSource ?? null;
   }
 
   start() {
@@ -42,13 +55,16 @@ export class IframeResizeHandler {
 
   private handleMessage(event: MessageEvent) {
     if (!this.allowedOrigins.includes(event.origin)) return;
-    const { type, width, height, sketchInstanceId } = event.data || {};
+    const expectedSource = this.resolveExpectedSource();
+    if (expectedSource && event.source !== expectedSource) return;
+    const data = event.data as { type?: unknown; width?: unknown; height?: unknown; sketchInstanceId?: unknown } | null;
+    const type = data?.type;
+    const width = data?.width;
+    const height = data?.height;
+    const sketchInstanceId = typeof data?.sketchInstanceId === 'string' ? data.sketchInstanceId : undefined;
     if (type !== 'p5-resize' || typeof width !== 'number' || typeof height !== 'number') return;
-    // Only allow resize if sketchInstanceId matches (or not set)
-    if (this.sketchInstanceId && sketchInstanceId && sketchInstanceId !== this.sketchInstanceId) {
-      // eslint-disable-next-line no-console
-      return;
-    }
+    if (this.requireSketchInstanceId && !sketchInstanceId) return;
+    if (this.sketchInstanceId && sketchInstanceId !== this.sketchInstanceId) return;
     const now = Date.now();
     if (now - this.lastResizeTime >= this.throttleMs) {
       this.onResize(width, height, sketchInstanceId);
