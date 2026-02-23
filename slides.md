@@ -197,10 +197,8 @@ Use `<P5Canvas>` for display-only sketches:
 <span style="color:#6b7280;">```js</span>
 <span style="color:#b42318;">function</span> <span style="color:#065f46;">setup</span>() {
   <span style="color:#065f46;">createCanvas</span>(<span style="color:#1d4ed8;">400</span>, <span style="color:#1d4ed8;">400</span>);
-}
-<span style="color:#b42318;">function</span> <span style="color:#065f46;">draw</span>() {
-  <span style="color:#065f46;">background</span>(<span style="color:#1d4ed8;">220</span>);
-  <span style="color:#065f46;">circle</span>(<span style="color:#7c3aed;">mouseX</span>, <span style="color:#7c3aed;">mouseY</span>, <span style="color:#1d4ed8;">40</span>);
+  <span style="color:#065f46;">background</span>(<span style="color:#1d4ed8;">0</span>);
+  <span style="color:#065f46;">circle</span>(<span style="color:#1d4ed8;">200</span>, <span style="color:#1d4ed8;">200</span>, <span style="color:#1d4ed8;">20</span>);
 }
 <span style="color:#6b7280;">```</span>
 <span style="color:#b42318;">&lt;/P5Canvas&gt;</span></code></pre>
@@ -231,11 +229,12 @@ Use `<P5Code>` for an interactive editor + live preview:
 
 <div v-click>
 Long sketches can overflow vertically in the editor pane.
+
+Set an explicit editor height in the code fence to keep layout stable:
+
 </div>
 
 <div v-click>
-Set an explicit editor height in the code fence to keep layout stable:
-</div>
 
 <pre style="padding: 0.8rem 1rem; border-radius: 10px; background: #f6f6f7; color: #1f2937; font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; overflow: auto;"><code><span style="color:#b42318;">&lt;P5Code&gt;</span>
 <span style="color:#6b7280;">```js {monaco-run}{autorun:false,height:'40vh'}</span>
@@ -245,7 +244,9 @@ Set an explicit editor height in the code fence to keep layout stable:
 <span style="color:#6b7280;">```</span>
 <span style="color:#b42318;">&lt;/P5Code&gt;</span></code></pre>
 
-<div v-click class="mt-4 opacity-90">
+</div>
+
+<div v-click>
 Use `height:'40vh'` (or another value) when your code block is long.
 </div>
 
