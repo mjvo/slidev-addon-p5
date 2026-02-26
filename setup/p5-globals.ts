@@ -322,6 +322,8 @@ export default {
     "MOVE",
     "TEXT",
     "WAIT",
+    "VIDEO",
+    "AUDIO",
     "HALF_PI",
     "PI",
     "QUARTER_PI",

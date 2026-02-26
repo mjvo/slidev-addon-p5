@@ -17,3 +17,11 @@ All notable changes to this project will be documented in this file.
 
 ### Docs
 - Simplified component syntax demo slides and cleaned up `v-click` flow in examples.
+
+## 1.0.2 - 2026-02-26
+
+### Added
+- Iframe permission attributes: preview iframes now include `allow="camera; microphone; autoplay; display-capture"` to permit sketches to capture camera and microphone via p5's `createCapture()` in secure contexts (HTTPS or localhost).
+
+### Docs
+- Added example demonstrating `createCapture(VIDEO)` in `README.md` and `slides.dev.md`.

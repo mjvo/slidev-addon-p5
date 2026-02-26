@@ -12,7 +12,9 @@
       ref="iframeElement"
       class="p5-canvas-iframe"
       :title="`p5.js Canvas`"
+      :allow="iframeAllow"
     />
+    <P5LogPanel :logs="iframeLogs" />
   </div>
 </template>
 
@@ -36,10 +38,12 @@ try {
 /* eslint-enable @typescript-eslint/no-var-requires */
 import { getP5LoadUrl } from '../setup/p5-version-manager'
 import { buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
+import { SECURITY_CONFIG } from '../setup/config'
 
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import P5ErrorBoundary from './P5ErrorBoundary.vue'
+import P5LogPanel from './P5LogPanel.vue'
 
 import { useSlots, onUpdated } from 'vue'
 const props = defineProps<{ code?: string, p5Version?: string, p5CdnUrl?: string }>()
@@ -48,9 +52,11 @@ const slotCode = ref<string | null>(null)
 const iframeElement = ref<HTMLIFrameElement>()
 const iframeWindow = ref<Window | null>(null)
 const errorMessage = ref<string | null>(null)
+const iframeAllow = SECURITY_CONFIG.iframeAllow
 let resizeHandler: IframeResizeHandler | null = null
 let messageHandler: IframeMessageHandler | null = null
 let messageHandlerFn: ((event: MessageEvent) => void) | null = null
+const iframeLogs = ref<Array<{ level?: string; args?: unknown[]; sketchInstanceId?: string; ts?: string }>>([])
 const sketchInstanceId = ref<string>(createSketchId())
 
 const wrapperStyle = computed(() => ({
@@ -73,6 +79,7 @@ function initializeIframe() {
     theme,
     sketchInstanceId: sketchInstanceId.value,
     p5ScriptUrl: p5LoadUrl,
+    includeOriginalConsole: true,
     includeThemeOnAddon: true,
     readyMessageCount: 2,
     requirePositiveCanvasSize: true,
@@ -194,7 +201,13 @@ async function runP5Sketch() {
                 ${transpiled}
               }, document.getElementById('p5-container'));
               window.__p5Addon.instance = p5Instance;
-            } catch (err) { /* swallow user runtime errors until reported */ }
+              // Expose on window.p5.instance for tooling/tests that expect it
+              try { window.p5 = window.p5 || {}; window.p5.instance = p5Instance; } catch (e) { /* ignore */ }
+            } catch (err) { 
+              try { 
+                window.parent.postMessage({ type: 'p5-error', error: (err && err.message) ? err.message : String(err), stack: (err && err.stack) ? err.stack : undefined, sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
+              } catch (e) { /* ignore */ }
+            }
           }
           if (window.p5) {
             createSketch();
@@ -277,6 +290,37 @@ onMounted(() => {
         onReady: () => {},
         onResize: () => {},
       })
+      // Also surface console messages from the iframe to the parent console
+      try {
+        messageHandler.registerHandler('p5-console', (data: unknown) => {
+          try {
+            const d = data as { level?: string; args?: unknown[]; sketchInstanceId?: string }
+            const level = (d && d.level) ? d.level : 'log'
+            const args = (d && Array.isArray(d.args)) ? d.args : []
+            // Prefix logs so it's clear they came from the iframe
+            // eslint-disable-next-line no-console
+            console[level] ? console[level]('[iframe p5]', ...args) : console.log('[iframe p5]', ...args)
+            try {
+              iframeLogs.value.push({ level, args, sketchInstanceId: d.sketchInstanceId, ts: new Date().toISOString() })
+              if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+            } catch (e) { /* ignore */ }
+          } catch (e) {
+            // ignore
+          }
+        })
+        messageHandler.registerHandler('p5-error', (data: unknown) => {
+          try {
+            const d = data as { message?: string; stack?: string; sketchInstanceId?: string }
+            const msg = (d && (d.message || d.stack)) ? (d.message || d.stack) : String(d)
+            // eslint-disable-next-line no-console
+            console.error('[iframe p5 error]', msg)
+            try {
+              iframeLogs.value.push({ level: 'error', args: [msg], sketchInstanceId: d.sketchInstanceId, ts: new Date().toISOString() })
+              if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+            } catch (e) { /* ignore */ }
+          } catch (e) { /* ignore */ }
+        })
+      } catch (e) { /* ignore */ }
       messageHandlerFn = (event: MessageEvent) => { try { messageHandler?.handle(event) } catch (e) { /* ignore */ } }
       window.addEventListener('message', messageHandlerFn)
     } catch (e) {

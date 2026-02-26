@@ -182,7 +182,44 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
     ? `
         window.__p5Addon.originalLog = window.console.log.bind(console);
         window.__p5Addon.originalError = window.console.error.bind(console);
-        window.__p5Addon.originalWarn = window.console.warn.bind(console);`
+        window.__p5Addon.originalWarn = window.console.warn.bind(console);
+        // Override console methods to capture logs and forward them to the parent
+        window.console.log = function(...args) {
+          try {
+            window.__p5Addon.logs.push({ level: 'log', args });
+            window.parent.postMessage({ type: 'p5-console', level: 'log', args: args.map(a => (typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)))), sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
+          } catch (e) { /* ignore */ }
+          try { window.__p5Addon.originalLog.apply(console, args); } catch (e) { /* ignore */ }
+        };
+        window.console.error = function(...args) {
+          try {
+            window.__p5Addon.logs.push({ level: 'error', args });
+            window.parent.postMessage({ type: 'p5-console', level: 'error', args: args.map(a => (typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)))), sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
+          } catch (e) { /* ignore */ }
+          try { window.__p5Addon.originalError.apply(console, args); } catch (e) { /* ignore */ }
+        };
+        window.console.warn = function(...args) {
+          try {
+            window.__p5Addon.logs.push({ level: 'warn', args });
+            window.parent.postMessage({ type: 'p5-console', level: 'warn', args: args.map(a => (typeof a === 'string' ? a : (typeof a === 'object' ? JSON.stringify(a) : String(a)))), sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
+          } catch (e) { /* ignore */ }
+          try { window.__p5Addon.originalWarn.apply(console, args); } catch (e) { /* ignore */ }
+        };
+        // Global error handlers: forward to parent as p5-error messages
+        window.onerror = function(message, source, lineno, colno, error) {
+          try {
+            const payload = { type: 'p5-error', message: String(message), stack: (error && error.stack) ? error.stack : (source + ':' + lineno + ':' + colno), sketchInstanceId: window.__p5Addon.sketchInstanceId };
+            window.parent.postMessage(payload, parentOrigin);
+          } catch (e) { /* ignore */ }
+          // Let the browser handle default logging as well
+          return false;
+        };
+        window.addEventListener('unhandledrejection', function(ev) {
+          try {
+            const reason = ev && ev.reason ? (ev.reason.stack || String(ev.reason)) : String(ev);
+            window.parent.postMessage({ type: 'p5-error', message: String(reason), sketchInstanceId: window.__p5Addon.sketchInstanceId }, parentOrigin);
+          } catch (e) { /* ignore */ }
+        });`
     : ''
   const themeScript = includeThemeOnAddon ? `\n        window.__p5Addon.theme = '${theme}';` : ''
 

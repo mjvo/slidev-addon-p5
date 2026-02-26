@@ -109,6 +109,28 @@ function setup() { createCanvas(300, 300); }
 - Non-p5 code is delegated to Slidev's JS runner when available. If unavailable, the addon returns an error instead of executing code locally.
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
 
+- Permissions (camera & microphone): the preview iframes are created with `allow="camera; microphone; autoplay; display-capture"` so sketches can call `navigator.mediaDevices.getUserMedia()` when needed. Browsers require a secure context (HTTPS) or `localhost` to grant media device access; users must grant permission in the browser UI. Serving slides over `file://` or plain HTTP will prevent getUserMedia from working.
+
+## Camera example (use `createCapture`)
+
+Use p5's `createCapture()` instead of calling `getUserMedia()` directly — this ensures the sketch runs in p5's instance mode and is cleaned up correctly. Wrap the code in a `<P5Canvas>` or `<P5Code>` block so it runs inside the iframe.
+
+<P5Canvas>
+```js
+let cam;
+function setup() {
+  createCanvas(320, 240);
+  cam = createCapture(VIDEO);
+  cam.size(320, 240);
+  cam.hide();
+}
+
+function draw() {
+  background(0);
+  if (cam) image(cam, 0, 0, width, height);
+}
+```
+</P5Canvas>
 ## TODO
 
 - Add an example of including p5.js as an imported code snippet.

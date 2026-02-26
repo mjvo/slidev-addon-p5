@@ -46,4 +46,11 @@ describe('transpileGlobalToInstance', () => {
     expect(out).toBeTruthy()
     expect(out).toContain(`${P5_NAMESPACE}.setup`)
   })
+
+  it('rewrites media constants for createCapture to instance namespace', () => {
+    const code = `function setup(){ createCapture(VIDEO); }`
+    const out = transpileGlobalToInstance(code)
+    expect(out).toBeTruthy()
+    expect(out).toContain(`${P5_NAMESPACE}.createCapture(${P5_NAMESPACE}.VIDEO)`)
+  })
 })

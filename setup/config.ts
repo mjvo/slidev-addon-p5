@@ -39,6 +39,7 @@ export const ADDON_CONFIG = {
 
   // Security configuration
   security: {
+    iframeAllow: 'camera; microphone; autoplay; display-capture',
     allowedOrigins: [
       'http://localhost',
       'http://127.0.0.1',

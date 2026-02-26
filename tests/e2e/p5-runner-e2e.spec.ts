@@ -148,6 +148,9 @@ test('Run inserts stop button and iframe resizes', async ({ page }) => {
     iframeHandle = await page.waitForSelector('iframe.p5-canvas-iframe:visible', { timeout: 10_000 })
   }
   expect(iframeHandle).toBeTruthy()
+  const iframeAllow = await iframeHandle!.getAttribute('allow')
+  expect(iframeAllow).toContain('camera')
+  expect(iframeAllow).toContain('microphone')
 
   const frame = await iframeHandle!.contentFrame()
   expect(frame).toBeTruthy()

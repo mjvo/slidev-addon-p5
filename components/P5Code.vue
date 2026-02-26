@@ -27,7 +27,9 @@
         class="p5-canvas-iframe"
         :title="`p5.js Canvas - ${displayOnly ? 'Display Only' : 'Interactive'}`"
         :data-p5code-id="sketchInstanceId"
+        :allow="iframeAllow"
       />
+      <P5LogPanel :logs="iframeLogs" />
     </div>
   </div>
 </template>
@@ -36,6 +38,7 @@
 /* eslint-disable no-useless-escape */
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import P5ErrorBoundary from './P5ErrorBoundary.vue'
+import P5LogPanel from './P5LogPanel.vue'
 import { createSketchId } from '../setup/id'
 import type { CSSProperties } from 'vue'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
@@ -43,6 +46,7 @@ import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { getP5LoadUrl } from '../setup/p5-version-manager'
 import { safeRemoveP5 } from '../setup/p5-utils'
 import { buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
+import { SECURITY_CONFIG } from '../setup/config'
 import { nextTick } from 'vue'
 
 // Dynamic require for loop-protect to avoid bundler/runtime issues in some setups
@@ -72,8 +76,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 const iframeElement = ref<HTMLIFrameElement>()
 const iframeWindow = ref<Window | null>(null)
+const iframeAllow = SECURITY_CONFIG.iframeAllow
 const iframeReady = ref(false)  // Track if iframe has initialized
 const errorMessage = ref<string | null>(null)
+const iframeLogs = ref<Array<{ level?: string; args?: unknown[]; sketchInstanceId?: string; ts?: string }>>([])
 const messageHandler = ref<IframeMessageHandler | null>(null)  // Handler for iframe messages (Monaco/editor-specific)
 const messageHandlerFn = ref<((event: MessageEvent) => void) | null>(null)  // Stable function reference for addEventListener/removeEventListener
 let resizeHandler: IframeResizeHandler | null = null
@@ -81,21 +87,35 @@ const sketchInstanceId = ref<string>(createSketchId())
 
 // Note: message routing is delegated to `IframeMessageHandler` via `messageHandlerFn` below.
 
-// Monaco code-runner registration (moved into script scope)
+interface SlidevGlobalLike {
+  registerCodeRunner?: (runner: { language: string; options?: Record<string, unknown> }) => (() => void) | undefined
+}
+
+// Monaco code-runner registration
 let unregisterMonacoRunner: (() => void) | null = null
+let monacoRegisterRetryTimer: ReturnType<typeof setInterval> | null = null
+
+const registerMonacoRunner = (): boolean => {
+  if (unregisterMonacoRunner) return true
   try {
-  // @ts-expect-error - Slidev injects window.__monaco and window.__slidev
-  const monacoGlobal = (window as unknown as { __monaco?: unknown }).__monaco
-  // @ts-expect-error - slidevGlobal may be injected by Slidev at runtime
-  const slidevGlobal = (window as unknown as { __slidev?: unknown }).__slidev
-  if (monacoGlobal && slidevGlobal && slidevGlobal.registerCodeRunner) {
-    unregisterMonacoRunner = slidevGlobal.registerCodeRunner({
+    const globals = window as unknown as { __monaco?: unknown; __slidev?: SlidevGlobalLike }
+    const monacoGlobal = globals.__monaco
+    const slidevGlobal = globals.__slidev
+    if (!monacoGlobal || !slidevGlobal || typeof slidevGlobal.registerCodeRunner !== 'function') {
+      return false
+    }
+    const unregister = slidevGlobal.registerCodeRunner({
       language: 'js',
       options: { sketchInstanceId: sketchInstanceId.value },
     })
+    if (typeof unregister === 'function') {
+      unregisterMonacoRunner = unregister
+      return true
+    }
+  } catch (e) {
+    // ignore in non-Slidev environments
   }
-} catch (e) {
-  // ignore in non-Slidev environments
+  return false
 }
 
 // Computed styles for flex layout (always side-by-side)
@@ -177,6 +197,35 @@ const initializeIframe = () => {
   doc.close()
 
   iframeWindow.value = iframe.contentWindow
+}
+
+// Register message handlers to collect logs/errors for UI panel
+const registerLogHandlers = () => {
+  try {
+    if (!messageHandler.value) return
+    messageHandler.value.registerHandler('p5-console', (data: unknown) => {
+      try {
+        const d = data as { level?: string; args?: unknown[]; sketchInstanceId?: string }
+        const level = (d && d.level) ? d.level : 'log'
+        const args = (d && Array.isArray(d.args)) ? d.args : []
+        // also mirror to parent console
+        // eslint-disable-next-line no-console
+        console[level] ? console[level]('[iframe p5]', ...args) : console.log('[iframe p5]', ...args)
+        iframeLogs.value.push({ level, args, sketchInstanceId: d.sketchInstanceId, ts: new Date().toISOString() })
+        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+      } catch (e) { /* ignore */ }
+    })
+    messageHandler.value.registerHandler('p5-error', (data: unknown) => {
+      try {
+        const d = data as { message?: string; stack?: string; sketchInstanceId?: string }
+        const msg = (d && (d.message || d.stack)) ? (d.message || d.stack) : String(d)
+        // eslint-disable-next-line no-console
+        console.error('[iframe p5 error]', msg)
+        iframeLogs.value.push({ level: 'error', args: [msg], sketchInstanceId: d.sketchInstanceId, ts: new Date().toISOString() })
+        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+      } catch (e) { /* ignore */ }
+    })
+  } catch (e) { /* ignore */ }
 }
 
 /**
@@ -304,6 +353,19 @@ const createMessageHandler = () => {
 }
 
 onMounted(() => {
+  if (!registerMonacoRunner()) {
+    let attempts = 0
+    monacoRegisterRetryTimer = setInterval(() => {
+      attempts += 1
+      if (registerMonacoRunner() || attempts >= 20) {
+        if (monacoRegisterRetryTimer) {
+          clearInterval(monacoRegisterRetryTimer)
+          monacoRegisterRetryTimer = null
+        }
+      }
+    }, 150)
+  }
+
   // Always initialize iframe (DOM fallback removed)
   initializeIframe()
 
@@ -358,6 +420,7 @@ onMounted(() => {
     requireSketchInstanceId: true,
     expectedSketchInstanceId: () => sketchInstanceId.value,
   })
+  registerLogHandlers()
   // Store message handler reference on iframe element for code-runners.ts access
   if (iframeElement.value) {
     const fe = iframeElement.value as unknown as Record<string, unknown>
@@ -409,6 +472,10 @@ onBeforeUnmount(() => {
     window.removeEventListener('message', messageHandlerFn.value)
     messageHandlerFn.value = null
     messageHandler.value = null
+  }
+  if (monacoRegisterRetryTimer) {
+    clearInterval(monacoRegisterRetryTimer)
+    monacoRegisterRetryTimer = null
   }
   if (unregisterMonacoRunner) unregisterMonacoRunner()
 })
