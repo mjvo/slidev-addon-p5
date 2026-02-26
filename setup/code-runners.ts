@@ -21,7 +21,9 @@ export type IframeElementLike = HTMLIFrameElement & {
   __cleanupManager?: { disconnectAll?: () => void };
 };
 import { defineCodeRunnersSetup } from "@slidev/types";
+import * as acorn from "acorn";
 import { transpileGlobalToInstance } from "./p5-transpile";
+import p5Main from "./p5-main";
 // loop-protect is used to instrument user code to guard against infinite loops
 // We `require` it dynamically to avoid bundler/top-level import issues in some Slidev setups.
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -176,6 +178,228 @@ const disconnectIframeCleanupManager = (iframeElement: IframeElementLike): void 
   } finally {
     delete iframeElement.__cleanupManager;
   }
+};
+
+type AstNode = {
+  type: string;
+  [key: string]: unknown;
+};
+
+type AstProgramNode = AstNode & {
+  type: 'Program';
+  body: AstNode[];
+};
+
+const P5_LIFECYCLE_NAMES = new Set<string>([
+  ...p5Main.functions,
+  'windowResized',
+  'mouseMoved',
+  'mouseDragged',
+  'mousePressed',
+  'mouseReleased',
+  'mouseClicked',
+  'doubleClicked',
+  'mouseWheel',
+  'keyPressed',
+  'keyReleased',
+  'keyTyped',
+  'touchStarted',
+  'touchMoved',
+  'touchEnded',
+]);
+
+const P5_SIGNATURE_CALL_NAMES = new Set<string>([
+  'createCanvas',
+  'resizeCanvas',
+  'noCanvas',
+  'createGraphics',
+  'createFramebuffer',
+  'createCapture',
+  'createVideo',
+  'createAudio',
+  'createImage',
+  'loadImage',
+  'saveCanvas',
+  'pixelDensity',
+  'frameRate',
+  'noLoop',
+  'loop',
+]);
+
+const P5_IFRAME_READY_TIMEOUT_MS = 8000;
+const P5_IFRAME_READY_POLL_MS = 50;
+
+const looksLikeP5ByRegex = (code: string): boolean =>
+  /\b(function\s+setup|const\s+setup|let\s+setup|var\s+setup|setup\s*=)/i.test(code);
+
+const isAstNode = (value: unknown): value is AstNode =>
+  typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string';
+
+const isIdentifierNode = (value: unknown): value is AstNode & { type: 'Identifier'; name: string } =>
+  isAstNode(value) && value.type === 'Identifier' && typeof (value as { name?: unknown }).name === 'string';
+
+const isFunctionLikeNode = (value: unknown): boolean =>
+  isAstNode(value) && (value.type === 'FunctionExpression' || value.type === 'ArrowFunctionExpression');
+
+const getAstNodeArray = (value: unknown): AstNode[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isAstNode);
+};
+
+const parseProgramForDetection = (code: string): AstProgramNode | null => {
+  for (const sourceType of ['script', 'module'] as const) {
+    try {
+      const parsed = acorn.parse(code, {
+        ecmaVersion: 'latest',
+        sourceType,
+        allowHashBang: true,
+      }) as unknown;
+      if (isAstNode(parsed) && parsed.type === 'Program') {
+        const body = getAstNodeArray((parsed as { body?: unknown }).body);
+        (parsed as AstProgramNode).body = body;
+        return parsed as AstProgramNode;
+      }
+    } catch (e) {
+      void e;
+    }
+  }
+  return null;
+};
+
+const getAssignedIdentifierName = (left: unknown): string | null => {
+  if (isIdentifierNode(left)) {
+    return left.name;
+  }
+  if (!isAstNode(left) || left.type !== 'MemberExpression') {
+    return null;
+  }
+  const object = (left as { object?: unknown }).object;
+  const property = (left as { property?: unknown }).property;
+  const computed = Boolean((left as { computed?: unknown }).computed);
+  if (
+    !computed &&
+    isIdentifierNode(object) &&
+    isIdentifierNode(property) &&
+    (object.name === 'window' || object.name === 'globalThis' || object.name === 'self')
+  ) {
+    return property.name;
+  }
+  return null;
+};
+
+const hasTopLevelP5LifecycleHook = (program: AstProgramNode): boolean => {
+  for (const statement of getAstNodeArray(program.body)) {
+    if (statement.type === 'FunctionDeclaration') {
+      const functionId = (statement as { id?: unknown }).id;
+      if (isIdentifierNode(functionId) && P5_LIFECYCLE_NAMES.has(functionId.name)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (statement.type === 'VariableDeclaration') {
+      const declarations = getAstNodeArray((statement as { declarations?: unknown }).declarations);
+      for (const declaration of declarations) {
+        const id = (declaration as { id?: unknown }).id;
+        const init = (declaration as { init?: unknown }).init;
+        if (isIdentifierNode(id) && P5_LIFECYCLE_NAMES.has(id.name) && isFunctionLikeNode(init)) {
+          return true;
+        }
+      }
+      continue;
+    }
+
+    if (statement.type === 'ExpressionStatement') {
+      const expression = (statement as { expression?: unknown }).expression;
+      if (!isAstNode(expression) || expression.type !== 'AssignmentExpression') {
+        continue;
+      }
+      const operator = (expression as { operator?: unknown }).operator;
+      const assignedName = getAssignedIdentifierName((expression as { left?: unknown }).left);
+      const right = (expression as { right?: unknown }).right;
+      if (operator === '=' && assignedName && P5_LIFECYCLE_NAMES.has(assignedName) && isFunctionLikeNode(right)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+const walkAst = (node: unknown, visit: (node: AstNode) => void): void => {
+  if (!isAstNode(node)) return;
+  visit(node);
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        walkAst(child, visit);
+      }
+    } else if (value && typeof value === 'object') {
+      walkAst(value, visit);
+    }
+  }
+};
+
+const getP5SignalData = (program: AstProgramNode): { hasP5Constructor: boolean; signatureCalls: Set<string> } => {
+  let hasP5Constructor = false;
+  const signatureCalls = new Set<string>();
+
+  walkAst(program, (node) => {
+    if (node.type === 'NewExpression') {
+      const callee = (node as { callee?: unknown }).callee;
+      if (isIdentifierNode(callee) && callee.name === 'p5') {
+        hasP5Constructor = true;
+      }
+      if (isAstNode(callee) && callee.type === 'MemberExpression') {
+        const object = (callee as { object?: unknown }).object;
+        const property = (callee as { property?: unknown }).property;
+        const computed = Boolean((callee as { computed?: unknown }).computed);
+        if (!computed && isIdentifierNode(object) && object.name === 'p5' && isIdentifierNode(property)) {
+          hasP5Constructor = true;
+        }
+      }
+      return;
+    }
+
+    if (node.type === 'CallExpression') {
+      const callee = (node as { callee?: unknown }).callee;
+      if (isIdentifierNode(callee) && P5_SIGNATURE_CALL_NAMES.has(callee.name)) {
+        signatureCalls.add(callee.name);
+      }
+    }
+  });
+
+  return { hasP5Constructor, signatureCalls };
+};
+
+const isLikelyP5Sketch = (code: string): boolean => {
+  const program = parseProgramForDetection(code);
+  if (!program) {
+    return looksLikeP5ByRegex(code);
+  }
+
+  if (hasTopLevelP5LifecycleHook(program)) {
+    return true;
+  }
+
+  const { hasP5Constructor, signatureCalls } = getP5SignalData(program);
+  return hasP5Constructor || signatureCalls.size > 0;
+};
+
+const waitForIframeP5Library = async (
+  iframeElement: HTMLIFrameElement,
+  timeoutMs: number = P5_IFRAME_READY_TIMEOUT_MS,
+  pollMs: number = P5_IFRAME_READY_POLL_MS
+): Promise<boolean> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const iframeWindow = iframeElement.contentWindow as (Window & { p5?: unknown }) | null;
+    if (iframeWindow && typeof iframeWindow.p5 !== 'undefined') {
+      return true;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+  }
+  return false;
 };
 
 /**
@@ -421,12 +645,18 @@ const executeInIframeContext = async (
 };
 
 // Export helpers for unit testing
-export { executeInIframeContext, formatErrorWithLineMapping, scheduleFallbackResize, findClosestP5CodeIdElement };
+export {
+  executeInIframeContext,
+  formatErrorWithLineMapping,
+  scheduleFallbackResize,
+  findClosestP5CodeIdElement,
+  isLikelyP5Sketch,
+};
 
 export default defineCodeRunnersSetup((runner: RunnerType) => {
   const customJs: NonNullable<RunnerType['js']> = async (code: string, ctx: unknown) => {
-    // Detect p5.js code by looking for setup() function
-    const looksLikeP5 = /\b(function\s+setup|const\s+setup|let\s+setup|setup\s*=)/i.test(code);
+    // Detect p5.js code using AST signals (with regex fallback on parse failures).
+    const looksLikeP5 = isLikelyP5Sketch(code);
     
     // Track transpiled code for error mapping
     let transpiled: string | null = null;
@@ -461,12 +691,6 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
       transpiled = transpileGlobalToInstance(codeToTranspile);
       if (!transpiled) {
         return { text: 'Error: Failed to transpile p5.js code. Please check syntax.' };
-      }
-      // Check if p5.js is loaded
-      if (typeof window.p5 === 'undefined') {
-        return { 
-          text: 'Error: p5.js library not loaded. Add this to your slides.md headmatter:\n\n---\nhead: |\n  <script src="https://cdn.jsdelivr.net/npm/p5@2.2.0/lib/p5.min.js"></script>\n---' 
-        };
       }
       // Try to find P5Canvas/P5Code wrapper and use its container or iframe
       // Try to find the correct P5Code iframe by UUID, prioritizing Monaco context if available
@@ -506,7 +730,10 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
       if (iframeElement && iframeElement.contentWindow) {
         // Give the iframe a moment to initialize if needed
         if (typeof (iframeElement.contentWindow as unknown as { p5?: unknown }).p5 === 'undefined') {
-          return { text: 'Error: p5.js not yet loaded in iframe. Please wait a moment and try again.' };
+          const p5Loaded = await waitForIframeP5Library(iframeElement);
+          if (!p5Loaded) {
+            return { text: 'Error: p5.js not yet loaded in iframe. Please wait a moment and try again.' };
+          }
         }
         // Reset resize deduplication state before each execution
         // This ensures resize events are processed even if canvas dimensions match previous execution

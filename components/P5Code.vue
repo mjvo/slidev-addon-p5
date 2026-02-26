@@ -215,16 +215,6 @@ const registerLogHandlers = () => {
         if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
       } catch (e) { /* ignore */ }
     })
-    messageHandler.value.registerHandler('p5-error', (data: unknown) => {
-      try {
-        const d = data as { message?: string; stack?: string; sketchInstanceId?: string }
-        const msg = (d && (d.message || d.stack)) ? (d.message || d.stack) : String(d)
-        // eslint-disable-next-line no-console
-        console.error('[iframe p5 error]', msg)
-        iframeLogs.value.push({ level: 'error', args: [msg], sketchInstanceId: d.sketchInstanceId, ts: new Date().toISOString() })
-        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
-      } catch (e) { /* ignore */ }
-    })
   } catch (e) { /* ignore */ }
 }
 
@@ -407,8 +397,12 @@ onMounted(() => {
         if (d && d.sketchInstanceId && d.sketchInstanceId !== sketchInstanceId.value) return
         const msg = (d && (d.error || d.message)) ? (d.error || d.message) : JSON.stringify(d)
         errorMessage.value = String(msg)
+        iframeLogs.value.push({ level: 'error', args: [String(msg)], sketchInstanceId: d?.sketchInstanceId, ts: new Date().toISOString() })
+        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
       } catch (e) {
         errorMessage.value = String(data)
+        iframeLogs.value.push({ level: 'error', args: [String(data)], sketchInstanceId: sketchInstanceId.value, ts: new Date().toISOString() })
+        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
       }
       console.error('[p5 addon] Error in iframe:', data)
     },

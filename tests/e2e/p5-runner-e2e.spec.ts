@@ -97,6 +97,22 @@ async function clickRunButton(page: Page, sketchInstanceId: string | null = null
   return !!clicked
 }
 
+async function navigateToFirstP5CodeSlide(page: Page): Promise<void> {
+  await page.waitForFunction(() => typeof window !== 'undefined', { timeout: 20_000 })
+  const targetSlideNo = await page.evaluate(() => {
+    const el = document.querySelector('[data-p5code-id]') as HTMLElement | null
+    return el?.closest('.slidev-page')?.getAttribute('data-slidev-no') || null
+  })
+  if (!targetSlideNo) return
+
+  await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
+  try {
+    await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']:not([style*="display: none"])`, { timeout: 30_000 })
+  } catch (e) {
+    // Allow fallback behavior if the target slide does not become visible in time
+  }
+}
+
 // Verifies that clicking Run inserts a stop button, renders a canvas inside
 // the mapped iframe, and that the iframe's size reflects the canvas.
 test('Run inserts stop button and iframe resizes', async ({ page }) => {
@@ -110,20 +126,8 @@ test('Run inserts stop button and iframe resizes', async ({ page }) => {
   // Ensure Slidev runtime has initialized
   await page.waitForFunction(() => !!(window['__slidev'] || document.querySelector('.slidev-page')), { timeout: 30_000 })
 
-    // Navigate directly to the first slide that contains p5 code
-    await page.waitForFunction(() => typeof window !== 'undefined', { timeout: 20_000 })
-    const targetSlideNo = await page.evaluate(() => {
-      const el = document.querySelector('[data-p5code-id]') as HTMLElement | null
-      return el?.closest('.slidev-page')?.getAttribute('data-slidev-no') || null
-    })
-    if (targetSlideNo) {
-      await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
-      try {
-        await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']:not([style*="display: none"])`, { timeout: 30_000 })
-      } catch (e) {
-        // allow fallback behavior below if slide doesn't become visible in time
-      }
-    }
+  // Navigate directly to the first slide that contains p5 code
+  await navigateToFirstP5CodeSlide(page)
 
   // Prefer a visible Run button, but fall back to the first Run button and force-click it
   // Try robust Run click helper (handles Playwright visibility flakiness)
@@ -170,4 +174,44 @@ test('Run inserts stop button and iframe resizes', async ({ page }) => {
     expect(iframeBox.width).toBeGreaterThanOrEqual(Math.max(1, Math.floor(canvasBox.width * 0.8)))
     expect(iframeBox.height).toBeGreaterThanOrEqual(Math.max(1, Math.floor(canvasBox.height * 0.8)))
   }
+})
+
+test('first Run succeeds when iframe p5 load is delayed', async ({ page }) => {
+  const p5ScriptPattern = '**/p5@*/lib/p5.min.js'
+  let delayedRequestHandled = false
+  await page.route(p5ScriptPattern, async (route) => {
+    if (!delayedRequestHandled) {
+      delayedRequestHandled = true
+      await new Promise((resolve) => setTimeout(resolve, 3500))
+    }
+    await route.continue()
+  })
+
+  await page.goto('/')
+  await page.waitForSelector('.slidev-page, .slidev-page-main, #slide-content', { timeout: 20_000 })
+  await page.waitForFunction(() => {
+    return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
+  }, { timeout: 20_000 })
+  await page.click('body')
+  await page.waitForFunction(() => !!(window['__slidev'] || document.querySelector('.slidev-page')), { timeout: 30_000 })
+  await navigateToFirstP5CodeSlide(page)
+
+  const clicked = await clickRunButton(page)
+  if (!clicked) throw new Error('No Run button found on page')
+
+  const id = await page.evaluate(() => {
+    const el = document.querySelector('button[title="Run code"][data-p5code-id]') as HTMLElement | null
+    return el?.getAttribute('data-p5code-id') || null
+  })
+  const iframeHandle = id
+    ? await page.waitForSelector(`iframe.p5-canvas-iframe[data-p5code-id="${id}"]:visible`, { timeout: 20_000 })
+    : await page.waitForSelector('iframe.p5-canvas-iframe:visible', { timeout: 20_000 })
+  expect(iframeHandle).toBeTruthy()
+
+  const frame = await iframeHandle!.contentFrame()
+  expect(frame).toBeTruthy()
+
+  const canvas = await waitForP5CanvasInFrame(frame!, 60_000)
+  expect(canvas).toBeTruthy()
+  await page.unroute(p5ScriptPattern)
 })

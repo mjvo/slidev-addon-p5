@@ -8,6 +8,10 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   await page.click('body')
   // Wait for Slidev to render the slide content
   await page.waitForSelector('.slidev-page, .slidev-page-main, #slide-content', { timeout: 10_000 })
+  // Wait for Monaco runner controls or p5 marker nodes before selecting target slide
+  await page.waitForFunction(() => {
+    return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
+  }, { timeout: 20_000 })
   // Navigate directly to the first slide that contains p5 code (avoids flaky ArrowRight navigation)
   await page.waitForFunction(() => typeof window !== 'undefined', { timeout: 10_000 })
   const targetSlideNo = await page.evaluate(() => {

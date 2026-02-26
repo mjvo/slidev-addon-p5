@@ -103,11 +103,12 @@ function setup() { createCanvas(300, 300); }
 ## Notes and limits
 
 - Threat model: trusted-only slide content. This addon assumes the slide author controls code fences passed to `<P5Canvas>` / `<P5Code>`.
-- p5 snippets are detected via `setup()` patterns in the code runner path.
-- If p5 in an iframe is still loading, first Run can fail; run again once ready.
+- p5 snippets are detected with AST-based signals (lifecycle hooks, `new p5(...)`, and common p5 sketch calls) with regex fallback if parsing fails.
+- Runner execution waits briefly for iframe-local p5 to finish loading before returning a not-ready error.
 - Keep code inside `<P5Canvas>` or `<P5Code>` slots for correct extraction/execution.
 - Non-p5 code is delegated to Slidev's JS runner when available. If unavailable, the addon returns an error instead of executing code locally.
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
+- Iframe runtime errors are surfaced in the inline error boundary and also recorded in the iframe logs panel.
 
 - Permissions (camera & microphone): the preview iframes are created with `allow="camera; microphone; autoplay; display-capture"` so sketches can call `navigator.mediaDevices.getUserMedia()` when needed. Browsers require a secure context (HTTPS) or `localhost` to grant media device access; users must grant permission in the browser UI. Serving slides over `file://` or plain HTTP will prevent getUserMedia from working.
 - Troubleshooting: if you see `ReferenceError: VIDEO is not defined`, upgrade to a version that includes p5 constant transpilation for `VIDEO`/`AUDIO` in instance mode.

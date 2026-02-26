@@ -5,6 +5,10 @@ This document describes how to run and debug the project's test suites locally.
 Test layout
 - Unit tests: `tests/unit/` — run with `vitest`.
 - E2E tests: `tests/e2e/` — run with `@playwright/test` against a local Slidev dev server.
+- Detection and readiness regressions:
+  - `tests/unit/code-runners.spec.ts` covers `isLikelyP5Sketch` classification.
+  - `tests/e2e/p5-runner-e2e.spec.ts` includes delayed-iframe-p5-load first-run coverage.
+  - `tests/e2e/error-ui.spec.ts` validates iframe `p5-error` messages surface in UI.
 
 NPM scripts
 - `pnpm run test:unit` — runs Vitest against `tests/unit`.
@@ -26,6 +30,11 @@ Playwright notes
 - To run a single E2E file:
 ```bash
 pnpm exec playwright test tests/e2e/my-test.spec.ts -g "test name substring"
+```
+- Useful targeted runs:
+```bash
+pnpm exec playwright test tests/e2e/p5-runner-e2e.spec.ts
+pnpm exec playwright test tests/e2e/error-ui.spec.ts
 ```
 - Run headed with trace and video for debugging:
 ```bash
