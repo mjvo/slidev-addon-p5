@@ -24,4 +24,4 @@ All notable changes to this project will be documented in this file.
 - Iframe permission attributes: preview iframes now include `allow="camera; microphone; autoplay; display-capture"` to permit sketches to capture camera and microphone via p5's `createCapture()` in secure contexts (HTTPS or localhost).
 
 ### Docs
-- Added example demonstrating `createCapture(VIDEO)` in `README.md` and `slides.dev.md`.
+- Added example demonstrating `createCapture(VIDEO)` in `README.md` and `slides.md`.

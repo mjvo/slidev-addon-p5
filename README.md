@@ -110,6 +110,30 @@ function setup() { createCanvas(300, 300); }
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
 
 - Permissions (camera & microphone): the preview iframes are created with `allow="camera; microphone; autoplay; display-capture"` so sketches can call `navigator.mediaDevices.getUserMedia()` when needed. Browsers require a secure context (HTTPS) or `localhost` to grant media device access; users must grant permission in the browser UI. Serving slides over `file://` or plain HTTP will prevent getUserMedia from working.
+- Troubleshooting: if you see `ReferenceError: VIDEO is not defined`, upgrade to a version that includes p5 constant transpilation for `VIDEO`/`AUDIO` in instance mode.
+
+## Understanding iframe error logs
+
+`<P5Code>` still sends normal `console.log()`/`print()` output to Slidev's Monaco console panel.  
+The iframe `Logs` panel is reserved for iframe runtime errors and stays hidden unless an error is received.
+
+Common iframe errors and what to do:
+
+- `ReferenceError: VIDEO is not defined`
+  - Meaning: an older addon/runtime build is still being served and media constants were not transpiled to instance mode.
+  - Action: restart Slidev, hard-refresh the browser, and make sure you are on a build that includes the `VIDEO`/`AUDIO` transpilation fix.
+- `NotAllowedError`
+  - Meaning: browser denied camera/microphone permission.
+  - Action: allow camera/microphone for the site in browser permissions and re-run.
+- `NotFoundError`
+  - Meaning: no camera/microphone device was found.
+  - Action: connect/enable a device and re-run.
+- `NotReadableError`
+  - Meaning: device exists but is busy/unavailable.
+  - Action: close other apps/tabs using the device and re-run.
+- `SecurityError` or `navigator.mediaDevices` missing
+  - Meaning: page is not in a secure context.
+  - Action: use `https://` or `localhost` (not `file://` or plain remote `http://`).
 
 ## Camera example (use `createCapture`)
 
