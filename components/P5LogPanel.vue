@@ -22,7 +22,11 @@ const props = withDefaults(defineProps<{ logs?: LogEntry[] }>(), {
   logs: () => [],
 })
 
-const hasLogs = computed(() => props.logs.length > 0)
+const errorLogs = computed(() => {
+  return props.logs.filter((entry) => (entry.level || '').toLowerCase() === 'error')
+})
+
+const hasLogs = computed(() => errorLogs.value.length > 0)
 
 const stringifyArg = (arg: unknown): string => {
   if (typeof arg === 'string')
@@ -40,7 +44,7 @@ const stringifyArg = (arg: unknown): string => {
 }
 
 const renderedLogs = computed(() => {
-  return props.logs
+  return errorLogs.value
     .map((entry) => {
       const level = (entry.level || 'log').toUpperCase()
       const ts = entry.ts || ''
