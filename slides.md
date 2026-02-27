@@ -191,6 +191,30 @@ function draw() {
 
 ---
 
+## Feature 5 — Import a snippet in `<P5Canvas>`
+
+Use Slidev's snippet include syntax to load sketch code from a file:
+
+<P5Canvas>
+
+<<< @/snippets/file-name-sketch.js js
+
+</P5Canvas>
+
+---
+
+## Feature 6 — Import a snippet in `<P5Code>`
+
+You can do the same in Monaco runner blocks:
+
+<P5Code>
+
+<<< @/snippets/write-every-pixel.js js {monaco-run}{autorun:false}
+
+</P5Code>
+
+---
+
 # Install the addon
 
 Add to `slides.md` frontmatter:
@@ -246,6 +270,26 @@ Use `<P5Code>` for an interactive editor + live preview:
   <span style="color:#065f46;">circle</span>(<span style="color:#7c3aed;">mouseX</span>, <span style="color:#7c3aed;">mouseY</span>, <span style="color:#1d4ed8;">30</span>);
 }
 <span style="color:#6b7280;">```</span>
+<span style="color:#b42318;">&lt;/P5Code&gt;</span></code></pre>
+
+---
+
+# Component syntax — Snippet import in `<P5Canvas>`
+
+Use Slidev snippet import syntax inside the component body:
+
+<pre style="padding: 0.8rem 1rem; border-radius: 10px; background: #f6f6f7; color: #1f2937; font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; overflow: auto;"><code><span style="color:#b42318;">&lt;P5Canvas&gt;</span>
+<span style="color:#6b7280;">&lt;&lt;&lt; @/snippets/file-name-sketch.js js</span>
+<span style="color:#b42318;">&lt;/P5Canvas&gt;</span></code></pre>
+
+---
+
+# Component syntax — Snippet import in `<P5Code>`
+
+For Monaco runner, include runner attributes on the snippet line:
+
+<pre style="padding: 0.8rem 1rem; border-radius: 10px; background: #f6f6f7; color: #1f2937; font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; overflow: auto;"><code><span style="color:#b42318;">&lt;P5Code&gt;</span>
+<span style="color:#6b7280;">&lt;&lt;&lt; @/snippets/write-every-pixel.js js {monaco-run}{autorun:false}</span>
 <span style="color:#b42318;">&lt;/P5Code&gt;</span></code></pre>
 
 ---

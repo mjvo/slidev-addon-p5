@@ -157,10 +157,6 @@ function draw() {
 }
 ```
 </P5Canvas>
-## TODO
-
-- Add an example of including p5.js as an imported code snippet.
-
 ## Contributing (developers)
 
 Short workflow:
