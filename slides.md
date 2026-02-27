@@ -191,31 +191,6 @@ function draw() {
 
 ---
 
-## Webcam with `createCapture()` in `<P5Canvas>`
-
-Use p5's `createCapture()` inside a `<P5Canvas>` so the iframe can request camera access.
-
-<P5Canvas>
-
-```js 
-let cam;
-function setup() {
-  createCanvas(320, 240);
-  cam = createCapture(VIDEO);
-  cam.size(320, 240);
-  cam.hide();
-}
-
-function draw() {
-  background(0);
-  if (cam) image(cam, 0, 0, width, height);
-}
-```
-
-</P5Canvas>
-
----
-
 # Install the addon
 
 Add to `slides.md` frontmatter:
