@@ -252,14 +252,9 @@ Use `<P5Code>` for an interactive editor + live preview:
 
 # Tip — Constrain long `<P5Code>` blocks
 
-<div v-click>
 Long sketches can overflow vertically in the editor pane.
 
 Set an explicit editor height in the code fence to keep layout stable:
-
-</div>
-
-<div v-click>
 
 <pre style="padding: 0.8rem 1rem; border-radius: 10px; background: #f6f6f7; color: #1f2937; font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; overflow: auto;"><code><span style="color:#b42318;">&lt;P5Code&gt;</span>
 <span style="color:#6b7280;">```js {monaco-run}{autorun:false,height:'40vh'}</span>
@@ -269,7 +264,6 @@ Set an explicit editor height in the code fence to keep layout stable:
 <span style="color:#6b7280;">```</span>
 <span style="color:#b42318;">&lt;/P5Code&gt;</span></code></pre>
 
-</div>
 
 <div v-click>
 Use `height:'40vh'` (or another value) when your code block is long.
