@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 1.0.2 - 2026-02-27
+
 ### Added
 - Iframe permission attributes: preview iframes now include `allow="camera; microphone; autoplay; display-capture"` to permit sketches to capture camera and microphone via p5's `createCapture()` in secure contexts (HTTPS or localhost).
 
@@ -12,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Added an iframe p5 readiness wait window before first execution so slow initial library loads do not fail on the first Run click.
 - Fixed `p5-error` handler registration in both `P5Canvas` and `P5Code` so runtime errors consistently reach the inline error UI while still being logged.
 - Added repo-level Vite chunk overrides (`vite.config.mjs`) so Slidev demo builds no longer emit the `monaco/bundled-types` ↔ `modules/shiki` circular chunk warning.
+- Updated `vite.config.mjs` export style so Slidev CI can load config without a direct `vite` dependency in this package.
 - Fixed iframe theme/background syncing so pressing `d` in Slidev updates existing `P5Canvas`/`P5Code` iframe backgrounds (and iframe text color where enabled) without requiring a rerun.
 
 ### Tests
@@ -21,6 +24,8 @@ All notable changes to this project will be documented in this file.
 
 ### Docs
 - Added example demonstrating `createCapture(VIDEO)` in `README.md` and `slides.md`.
+- Added snippet import examples for `<P5Canvas>` and `<P5Code>` in `slides.md`, plus reusable files under `snippets/`.
+- Consolidated webcam demo to a single slide and removed the completed snippet-example TODO from `README.md`.
 
 ## 1.0.1 - 2026-02-24
 
