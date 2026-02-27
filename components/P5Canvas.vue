@@ -37,7 +37,7 @@ try {
 }
 /* eslint-enable @typescript-eslint/no-var-requires */
 import { getP5LoadUrl } from '../setup/p5-version-manager'
-import { buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
+import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG } from '../setup/config'
 
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
@@ -56,6 +56,8 @@ const iframeAllow = SECURITY_CONFIG.iframeAllow
 let resizeHandler: IframeResizeHandler | null = null
 let messageHandler: IframeMessageHandler | null = null
 let messageHandlerFn: ((event: MessageEvent) => void) | null = null
+let themeObserver: MutationObserver | null = null
+let themeSyncFrame: number | null = null
 const iframeLogs = ref<Array<{ level?: string; args?: unknown[]; sketchInstanceId?: string; ts?: string }>>([])
 const sketchInstanceId = ref<string>(createSketchId())
 
@@ -88,6 +90,49 @@ function initializeIframe() {
   doc.write(html)
   doc.close()
   iframeWindow.value = iframeElement.value.contentWindow
+}
+
+function syncIframeTheme() {
+  if (!iframeWindow.value) return
+  const iframeDoc = iframeWindow.value.document
+  const { computedBg, theme } = computeIframeBackgroundTheme({ preferredElementId: 'slide-content' })
+  applyThemeToIframeDocument(iframeDoc, computedBg, theme)
+}
+
+function scheduleIframeThemeSync() {
+  if (themeSyncFrame !== null) {
+    cancelAnimationFrame(themeSyncFrame)
+  }
+  themeSyncFrame = window.requestAnimationFrame(() => {
+    themeSyncFrame = null
+    syncIframeTheme()
+  })
+}
+
+function startThemeObserver() {
+  if (themeObserver) return
+  themeObserver = new MutationObserver(() => {
+    scheduleIframeThemeSync()
+  })
+  const observerOptions = {
+    attributes: true,
+    attributeFilter: ['class', 'style', 'data-theme'],
+  }
+  themeObserver.observe(document.documentElement, observerOptions)
+  if (document.body) {
+    themeObserver.observe(document.body, observerOptions)
+  }
+}
+
+function stopThemeObserver() {
+  if (themeObserver) {
+    themeObserver.disconnect()
+    themeObserver = null
+  }
+  if (themeSyncFrame !== null) {
+    cancelAnimationFrame(themeSyncFrame)
+    themeSyncFrame = null
+  }
 }
 
 // Message routing will be handled by `IframeMessageHandler` instance registered below.
@@ -245,6 +290,8 @@ onMounted(() => {
     slotCode.value = extractCodeFromSlot()
     // eslint-disable-next-line no-console
     initializeIframe()
+    startThemeObserver()
+    scheduleIframeThemeSync()
     setTimeout(() => {
       // eslint-disable-next-line no-console
       runP5Sketch()
@@ -326,6 +373,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopThemeObserver()
   if (resizeHandler) resizeHandler.stop()
   if (messageHandlerFn) {
     window.removeEventListener('message', messageHandlerFn)

@@ -145,6 +145,34 @@ export const computeIframeBackgroundTheme = (
   return { computedBg, theme }
 }
 
+export interface ApplyIframeThemeOptions {
+  includeBodyTextColor?: boolean
+}
+
+export const applyThemeToIframeDocument = (
+  iframeDocument: Document,
+  computedBg: string,
+  theme: IframeTheme,
+  options: ApplyIframeThemeOptions = {}
+): void => {
+  const { includeBodyTextColor = false } = options
+  const html = iframeDocument.documentElement
+  const body = iframeDocument.body
+
+  if (html) html.style.background = computedBg
+  if (body) {
+    body.style.background = computedBg
+    if (includeBodyTextColor) {
+      body.style.color = theme === 'dark' ? '#eee' : '#222'
+    }
+  }
+
+  const iframeWindow = iframeDocument.defaultView as (Window & { __p5Addon?: { theme?: IframeTheme } }) | null
+  if (iframeWindow?.__p5Addon) {
+    iframeWindow.__p5Addon.theme = theme
+  }
+}
+
 export interface IframeHtmlOptions {
   computedBg: string
   theme: IframeTheme

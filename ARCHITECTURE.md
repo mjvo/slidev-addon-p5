@@ -1,6 +1,6 @@
 # slidev-addon-p5 Architecture
 
-Last updated: 2026-02-26
+Last updated: 2026-02-27
 
 This document describes how `slidev-addon-p5` works today.
 
@@ -28,6 +28,7 @@ Both components use iframe-based execution (DOM fallback is removed).
 
 - `index.ts`: addon entry; default export is `setup/code-runners.ts`.
 - `setup/code-runners.ts`: Slidev code-runner integration, AST-based p5 detection, transpile + iframe execution, iframe readiness waiting, console output bridge, stop button wiring.
+- `vite.config.mjs`: repo-local Slidev/Vite build override to avoid manual-chunk circular mapping between Monaco types and Shiki in demo builds.
 - `setup/iframe-bootstrap.ts`: shared iframe HTML bootstrap and background/theme resolution used by both components.
 - `setup/p5-transpile.ts`: AST transform from p5 global mode to instance mode (`_p`).
 - `setup/iframe-message-handler.ts`: secure postMessage routing with origin checks and message-type handlers.
@@ -93,6 +94,7 @@ Typical transform:
 
 - Old p5 instances are removed before rerun.
 - Iframe container content is reset between executions.
+- Parent-theme changes are observed and iframe background/theme state is synced live for existing iframe documents.
 - Observer-based cleanup is deterministic per iframe run: prior cleanup observers are disconnected before new ones are registered.
 - Cleanup observers self-remove after firing and are disconnected on explicit teardown.
 - `safeRemoveP5` / `safeRemoveElement` are used to avoid double-removal and cross-realm teardown issues.

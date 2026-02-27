@@ -45,7 +45,7 @@ import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { getP5LoadUrl } from '../setup/p5-version-manager'
 import { safeRemoveP5 } from '../setup/p5-utils'
-import { buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
+import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG } from '../setup/config'
 import { nextTick } from 'vue'
 
@@ -94,6 +94,8 @@ interface SlidevGlobalLike {
 // Monaco code-runner registration
 let unregisterMonacoRunner: (() => void) | null = null
 let monacoRegisterRetryTimer: ReturnType<typeof setInterval> | null = null
+let themeObserver: MutationObserver | null = null
+let themeSyncFrame: number | null = null
 
 const registerMonacoRunner = (): boolean => {
   if (unregisterMonacoRunner) return true
@@ -199,6 +201,51 @@ const initializeIframe = () => {
   iframeWindow.value = iframe.contentWindow
 }
 
+const syncIframeTheme = () => {
+  if (!iframeWindow.value) return
+  const iframeDoc = iframeWindow.value.document
+  const { computedBg, theme } = computeIframeBackgroundTheme({
+    preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
+  })
+  applyThemeToIframeDocument(iframeDoc, computedBg, theme, { includeBodyTextColor: true })
+}
+
+const scheduleIframeThemeSync = () => {
+  if (themeSyncFrame !== null) {
+    cancelAnimationFrame(themeSyncFrame)
+  }
+  themeSyncFrame = window.requestAnimationFrame(() => {
+    themeSyncFrame = null
+    syncIframeTheme()
+  })
+}
+
+const startThemeObserver = () => {
+  if (themeObserver) return
+  themeObserver = new MutationObserver(() => {
+    scheduleIframeThemeSync()
+  })
+  const observerOptions = {
+    attributes: true,
+    attributeFilter: ['class', 'style', 'data-theme'],
+  }
+  themeObserver.observe(document.documentElement, observerOptions)
+  if (document.body) {
+    themeObserver.observe(document.body, observerOptions)
+  }
+}
+
+const stopThemeObserver = () => {
+  if (themeObserver) {
+    themeObserver.disconnect()
+    themeObserver = null
+  }
+  if (themeSyncFrame !== null) {
+    cancelAnimationFrame(themeSyncFrame)
+    themeSyncFrame = null
+  }
+}
+
 // Register message handlers to collect logs/errors for UI panel
 const registerLogHandlers = () => {
   try {
@@ -272,6 +319,7 @@ const executeInIframe = async (code: string) => {
   doc.open()
   doc.write(html)
   doc.close()
+  scheduleIframeThemeSync()
 
   try {
     // Inject code via blob URL instead of eval
@@ -358,6 +406,8 @@ onMounted(() => {
 
   // Always initialize iframe (DOM fallback removed)
   initializeIframe()
+  startThemeObserver()
+  scheduleIframeThemeSync()
 
   // Use the shared IframeResizeHandler for resize messages, passing sketchInstanceId
   resizeHandler = new IframeResizeHandler({
@@ -460,6 +510,7 @@ onBeforeUnmount(() => {
 
 onBeforeUnmount(() => {
   cleanupP5()
+  stopThemeObserver()
   if (resizeHandler) resizeHandler.stop()
   if (messageHandlerFn.value) {
     // Remove with the same function reference that was added

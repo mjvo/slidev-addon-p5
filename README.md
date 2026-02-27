@@ -109,6 +109,7 @@ function setup() { createCanvas(300, 300); }
 - Non-p5 code is delegated to Slidev's JS runner when available. If unavailable, the addon returns an error instead of executing code locally.
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
 - Iframe runtime errors are surfaced in the inline error boundary and also recorded in the iframe logs panel.
+- Iframe preview background follows Slidev theme toggles live (including `d` dark/light switch during slideshow).
 
 - Permissions (camera & microphone): the preview iframes are created with `allow="camera; microphone; autoplay; display-capture"` so sketches can call `navigator.mediaDevices.getUserMedia()` when needed. Browsers require a secure context (HTTPS) or `localhost` to grant media device access; users must grant permission in the browser UI. Serving slides over `file://` or plain HTTP will prevent getUserMedia from working.
 - Troubleshooting: if you see `ReferenceError: VIDEO is not defined`, upgrade to a version that includes p5 constant transpilation for `VIDEO`/`AUDIO` in instance mode.
@@ -159,7 +160,6 @@ function draw() {
 ## TODO
 
 - Add an example of including p5.js as an imported code snippet.
-- Investigate/resolve Vite circular chunk warning involving Monaco + Shiki (`monaco/bundled-types` ↔ `modules/shiki`) to reduce bundle risk.
 
 ## Contributing (developers)
 

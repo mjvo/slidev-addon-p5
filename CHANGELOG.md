@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 - Switched runner-side p5 detection from a `setup()` regex to AST-based sketch signals (lifecycle hooks, constructor usage, and signature calls) with regex fallback when parsing fails.
 - Added an iframe p5 readiness wait window before first execution so slow initial library loads do not fail on the first Run click.
 - Fixed `p5-error` handler registration in both `P5Canvas` and `P5Code` so runtime errors consistently reach the inline error UI while still being logged.
+- Added repo-level Vite chunk overrides (`vite.config.mjs`) so Slidev demo builds no longer emit the `monaco/bundled-types` ↔ `modules/shiki` circular chunk warning.
+- Fixed iframe theme/background syncing so pressing `d` in Slidev updates existing `P5Canvas`/`P5Code` iframe backgrounds (and iframe text color where enabled) without requiring a rerun.
 
 ### Tests
 - Added unit coverage for `isLikelyP5Sketch` detection scenarios in `tests/unit/code-runners.spec.ts`.
