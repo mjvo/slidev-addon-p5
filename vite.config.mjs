@@ -1,8 +1,6 @@
-import { defineConfig } from 'vite'
-
 const ASYNC_MODULES = ['file-saver', 'vue', '@vue']
 
-export default defineConfig({
+export default {
   build: {
     rollupOptions: {
       output: {
@@ -18,4 +16,4 @@ export default defineConfig({
       },
     },
   },
-})
+}
