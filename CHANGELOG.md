@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Start 1.0.4-dev development cycle.
+
 ## 1.0.3 - 2026-02-28
 
 ### Added
