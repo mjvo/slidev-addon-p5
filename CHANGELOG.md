@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## 1.0.3 - 2026-02-28
+
 ### Added
 - Added opt-in p5.sound script loading support (uses `p5.sound@0.2.0` when enabled) across iframe bootstrap and component props, including overrides via `p5SoundVersion`/`p5SoundCdnUrl` and toggle via `enableP5Sound`.
 
@@ -16,6 +18,7 @@ All notable changes to this project will be documented in this file.
 
 ### Docs
 - Added a dedicated `slides.md` smoke-test slide demonstrating opt-in `p5.sound` loading via `:enable-p5-sound="true"` and updated README examples to emphasize that sound loading is off by default.
+- Updated FFT demo bar coloring to an HSL red-to-blue sweep in `slides.md`.
 
 ## 1.0.2 - 2026-02-27
 
