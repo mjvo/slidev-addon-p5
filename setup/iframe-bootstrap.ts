@@ -178,6 +178,7 @@ export interface IframeHtmlOptions {
   theme: IframeTheme
   sketchInstanceId: string
   p5ScriptUrl?: string
+  p5ScriptUrls?: string[]
   includeOriginalConsole?: boolean
   includeThemeOnAddon?: boolean
   includeBodyTextColor?: boolean
@@ -191,6 +192,7 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
     theme,
     sketchInstanceId,
     p5ScriptUrl,
+    p5ScriptUrls,
     includeOriginalConsole = false,
     includeThemeOnAddon = false,
     includeBodyTextColor = false,
@@ -205,7 +207,12 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
     ? 'width > 10 && height > 10 && (width !== lastWidth || height !== lastHeight)'
     : 'width !== lastWidth || height !== lastHeight'
   const textColorStyle = includeBodyTextColor ? `\n          color: ${theme === 'dark' ? '#eee' : '#222'};` : ''
-  const p5ScriptTag = p5ScriptUrl ? `\n      <script src="${p5ScriptUrl}"></script>` : ''
+  const scriptSources = p5ScriptUrls && p5ScriptUrls.length > 0
+    ? p5ScriptUrls
+    : (p5ScriptUrl ? [p5ScriptUrl] : [])
+  const p5ScriptTag = scriptSources
+    .map((url) => `\n      <script src="${url}"></script>`)
+    .join('')
   const originalConsoleScript = includeOriginalConsole
     ? `
         window.__p5Addon.originalLog = window.console.log.bind(console);

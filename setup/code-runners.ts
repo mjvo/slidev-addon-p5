@@ -51,7 +51,7 @@ type ParentWithP5ResizeHooks = HTMLElement & {
   onP5IframeResize?: (detail: unknown) => void;
   dispatchP5Resize?: (detail: unknown) => void;
 };
-import { safeRemoveP5 } from './p5-utils';
+import { resetIframeToBaseHtml, safeRemoveP5, stopP5SoundPlayback } from './p5-utils';
 
 // Minimal, local runner interface that captures the shape we use from Slidev's
 // runner object. This tightens typing compared to `any` while remaining
@@ -463,7 +463,6 @@ const executeInIframeContext = async (
     if (typeof (iframeWindow as unknown as { p5?: unknown }).p5 === 'undefined') {
       return { success: false, error: 'p5.js not loaded in iframe' };
     }
-
     // Clear logs from previous execution
     if (!iwWindow.__p5Addon) {
       iwWindow.__p5Addon = {};
@@ -484,6 +483,7 @@ const executeInIframeContext = async (
       // Clear previous p5 instance if it exists
           if (iwWindow.p5 && (iwWindow.p5.instance as unknown)) {
         try {
+          stopP5SoundPlayback(iframeWindow);
           safeRemoveP5(iwWindow.p5.instance);
         } catch (e) {
           // Ignore cleanup errors
@@ -728,6 +728,7 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
       }
       // If iframe is present, execute code in iframe context
       if (iframeElement && iframeElement.contentWindow) {
+        await resetIframeToBaseHtml(iframeElement as IframeElementLike);
         // Give the iframe a moment to initialize if needed
         if (typeof (iframeElement.contentWindow as unknown as { p5?: unknown }).p5 === 'undefined') {
           const p5Loaded = await waitForIframeP5Library(iframeElement);
@@ -764,6 +765,7 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
           cleanedUp = true;
           try {
             const iw = iframeElement.contentWindow as IframeWindowWithAddon | null;
+            stopP5SoundPlayback(iw);
             if (iw?.p5?.instance) {
               safeRemoveP5(iw.p5.instance);
             }
@@ -774,6 +776,7 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
                 container.removeChild(container.firstChild);
               }
             }
+            void resetIframeToBaseHtml(trackedIframe);
             // Hide stop button when leaving slide
             if (stopButtonController) {
               const stopBtn = stopButtonController.getButton();

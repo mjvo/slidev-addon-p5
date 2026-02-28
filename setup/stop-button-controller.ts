@@ -14,7 +14,7 @@
  * The stop button allows users to pause the p5 draw() loop.
  * It's created hidden and shown only when p5 code is executing.
  */
-import { safeRemoveElement } from './p5-utils';
+import { resetIframeToBaseHtml, safeRemoveElement, stopP5SoundPlayback } from './p5-utils';
 
 export class StopButtonController {
   private button: HTMLElement;
@@ -64,7 +64,7 @@ export class StopButtonController {
     svg.innerHTML = '<rect x="7" y="7" width="18" height="18" rx="1"/>';
     btn.appendChild(svg);
 
-    btn.addEventListener('click', () => this.handleStop());
+    btn.addEventListener('click', () => { void this.handleStop(); });
     return btn;
   }
 
@@ -73,13 +73,37 @@ export class StopButtonController {
    *
    * @private
    */
-  private handleStop(): void {
+  private async handleStop(): Promise<void> {
     try {
+      let handled = false;
       const maybeP5 = (this.iframeWindow as unknown as { p5?: { instance?: { noLoop?: () => void } } }).p5;
       const instance = maybeP5?.instance;
       if (instance && typeof instance.noLoop === 'function') {
         instance.noLoop();
-        this.appendLog('[p5] Loop stopped - draw() will not execute');
+        handled = true;
+      }
+
+      const stoppedSounds = stopP5SoundPlayback(this.iframeWindow);
+      if (stoppedSounds > 0) {
+        handled = true;
+      }
+
+      // Hard reset iframe runtime to kill pending async callbacks (e.g. loadSound promises)
+      // that may otherwise restart playback after a stop event.
+      try {
+        const frame = this.iframeWindow.frameElement as (HTMLIFrameElement & { __baseHtml?: string }) | null;
+        if (frame) {
+          const reset = await resetIframeToBaseHtml(frame);
+          if (reset) {
+            handled = true;
+          }
+        }
+      } catch (e) {
+        // ignore iframe reset failures and continue with best-effort stop
+      }
+
+      if (handled) {
+        this.appendLog('Stopped. Click the play button to start again.');
         this.button.style.display = 'none';
       }
     } catch (error: unknown) {

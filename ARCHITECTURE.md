@@ -102,12 +102,19 @@ Typical transform:
 
 ## Version Loading
 
-`setup/p5-version-manager.ts` supports pinned versions and custom CDN URLs.
+`setup/p5-version-manager.ts` supports pinned versions and custom CDN URLs for both
+p5 core and p5.sound.
 
 Precedence:
 1. `p5CdnUrl` prop (highest)
 2. `p5Version` prop
 3. default latest supported version
+
+p5.sound loading:
+1. `p5SoundCdnUrl` prop (highest)
+2. `p5SoundVersion` prop
+3. latest tested `p5.sound` version (`0.2.0`) when enabled
+4. skipped unless `enableP5Sound` is `true`
 
 ## Testing and CI
 

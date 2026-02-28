@@ -43,8 +43,8 @@ import { createSketchId } from '../setup/id'
 import type { CSSProperties } from 'vue'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
-import { getP5LoadUrl } from '../setup/p5-version-manager'
-import { safeRemoveP5 } from '../setup/p5-utils'
+import { getP5ScriptUrls } from '../setup/p5-version-manager'
+import { resetIframeToBaseHtml, safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
 import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG } from '../setup/config'
 import { nextTick } from 'vue'
@@ -66,12 +66,18 @@ interface Props {
   displayOnly?: boolean
   p5Version?: string   // Specific p5.js version to load (e.g., '2.2.0', '2.1.0')
   p5CdnUrl?: string    // Custom CDN URL for p5.js (overrides version if set)
+  p5SoundVersion?: string // Optional p5.sound version (defaults to latest tested)
+  p5SoundCdnUrl?: string // Custom CDN URL for p5.sound
+  enableP5Sound?: boolean // Set false to skip loading p5.sound
 }
 
 const props = withDefaults(defineProps<Props>(), {
   displayOnly: false,
   p5Version: undefined,  // Use latest stable version
   p5CdnUrl: undefined,   // Use CDN URL determined by version
+  p5SoundVersion: undefined, // Use latest tested p5.sound
+  p5SoundCdnUrl: undefined, // Use CDN URL determined by version
+  enableP5Sound: false, // Load p5.sound only when explicitly enabled
 })
 
 const iframeElement = ref<HTMLIFrameElement>()
@@ -149,7 +155,7 @@ const canvasStyle = computed(() => ({
 /**
  * Initialize iframe with p5.js library
  */
-const initializeIframe = () => {
+const initializeIframe = async () => {
   if (!iframeElement.value) return
 
   const iframe = iframeElement.value
@@ -171,15 +177,13 @@ const initializeIframe = () => {
     container.style.maxHeight = ''
   }
 
-  const doc = iframe.contentDocument || iframe.contentWindow?.document
-  if (!doc) {
-    return
-  }
-
   // Determine p5.js CDN URL based on version prop
-  const p5LoadUrl = getP5LoadUrl({
+  const p5ScriptUrls = getP5ScriptUrls({
     version: props.p5Version,
     cdnUrl: props.p5CdnUrl,
+    soundVersion: props.p5SoundVersion,
+    soundCdnUrl: props.p5SoundCdnUrl,
+    includeSound: props.enableP5Sound,
   })
   const { computedBg, theme } = computeIframeBackgroundTheme({
     preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
@@ -188,15 +192,14 @@ const initializeIframe = () => {
     computedBg,
     theme,
     sketchInstanceId: sketchInstanceId.value,
-    p5ScriptUrl: p5LoadUrl,
+    p5ScriptUrls,
     includeOriginalConsole: true,
     includeThemeOnAddon: true,
     includeBodyTextColor: true,
   })
+  ;(iframe as HTMLIFrameElement & { __baseHtml?: string }).__baseHtml = html
 
-  doc.open()
-  doc.write(html)
-  doc.close()
+  await resetIframeToBaseHtml(iframe as HTMLIFrameElement & { __baseHtml?: string })
 
   iframeWindow.value = iframe.contentWindow
 }
@@ -274,6 +277,7 @@ const executeInIframe = async (code: string) => {
     console.error('[p5 addon] Iframe window not available')
     return { error: 'Iframe not ready' }
   }
+  stopP5SoundPlayback(iframeWindow.value)
   // Reset iframe size styles before running new sketch
   /* console.log('[P5Code] Resetting iframe size before sketch:', {
     width: iframeElement.value.style.width,
@@ -305,7 +309,6 @@ const executeInIframe = async (code: string) => {
 
   // This ensures a clean state, especially when navigating between slides
   // The iframe document persists across slide navigation, so we need to reset it
-  const doc = iframeWindow.value.document;
   const { computedBg, theme } = computeIframeBackgroundTheme({
     preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
   })
@@ -313,12 +316,20 @@ const executeInIframe = async (code: string) => {
     computedBg,
     theme,
     sketchInstanceId: sketchInstanceId.value,
+    p5ScriptUrls: getP5ScriptUrls({
+      version: props.p5Version,
+      cdnUrl: props.p5CdnUrl,
+      soundVersion: props.p5SoundVersion,
+      soundCdnUrl: props.p5SoundCdnUrl,
+      includeSound: props.enableP5Sound,
+    }),
     includeOriginalConsole: true,
   })
+  ;(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string }).__baseHtml = html
 
-  doc.open()
-  doc.write(html)
-  doc.close()
+  await resetIframeToBaseHtml(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string })
+  iframeWindow.value = iframeElement.value.contentWindow
+  if (!iframeWindow.value) return { error: 'Iframe not ready after reset' }
   scheduleIframeThemeSync()
 
   try {
@@ -361,6 +372,7 @@ const executeInIframe = async (code: string) => {
  * Cleanup p5 instance
  */
 const cleanupP5 = () => {
+  stopP5SoundPlayback(iframeWindow.value)
   if (iframeWindow.value && iframeWindow.value.p5 && iframeWindow.value.p5.instance) {
     try {
       safeRemoveP5(iframeWindow.value.p5.instance)
@@ -405,7 +417,7 @@ onMounted(() => {
   }
 
   // Always initialize iframe (DOM fallback removed)
-  initializeIframe()
+  void initializeIframe()
   startThemeObserver()
   scheduleIframeThemeSync()
 

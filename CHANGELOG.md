@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Added opt-in p5.sound script loading support (uses `p5.sound@0.2.0` when enabled) across iframe bootstrap and component props, including overrides via `p5SoundVersion`/`p5SoundCdnUrl` and toggle via `enableP5Sound`.
+
+### Fixed
+- Stop-button and lifecycle cleanup now stop active p5.sound sources and reset iframe runtime state between runs so async `loadSound()` flows from prior runs cannot keep or re-layer playback.
+
+### Tests
+- Added unit coverage for p5/p5.sound URL resolution and ordered script injection in `tests/unit/p5-version-manager.spec.ts`.
+- Added unit coverage for p5.sound stop/disconnect cleanup behavior in `tests/unit/p5-utils.spec.ts`.
+
+### Docs
+- Added a dedicated `slides.md` smoke-test slide demonstrating opt-in `p5.sound` loading via `:enable-p5-sound="true"` and updated README examples to emphasize that sound loading is off by default.
+
 ## 1.0.2 - 2026-02-27
 
 ### Added

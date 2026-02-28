@@ -36,9 +36,10 @@ try {
   void 0
 }
 /* eslint-enable @typescript-eslint/no-var-requires */
-import { getP5LoadUrl } from '../setup/p5-version-manager'
+import { getP5ScriptUrls } from '../setup/p5-version-manager'
 import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG } from '../setup/config'
+import { resetIframeToBaseHtml, safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
 
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
@@ -46,7 +47,21 @@ import P5ErrorBoundary from './P5ErrorBoundary.vue'
 import P5LogPanel from './P5LogPanel.vue'
 
 import { useSlots, onUpdated } from 'vue'
-const props = defineProps<{ code?: string, p5Version?: string, p5CdnUrl?: string }>()
+const props = withDefaults(defineProps<{
+  code?: string
+  p5Version?: string
+  p5CdnUrl?: string
+  p5SoundVersion?: string
+  p5SoundCdnUrl?: string
+  enableP5Sound?: boolean
+}>(), {
+  code: undefined,
+  p5Version: undefined,
+  p5CdnUrl: undefined,
+  p5SoundVersion: undefined,
+  p5SoundCdnUrl: undefined,
+  enableP5Sound: false,
+})
 const slots = useSlots()
 const slotCode = ref<string | null>(null)
 const iframeElement = ref<HTMLIFrameElement>()
@@ -69,26 +84,29 @@ const wrapperStyle = computed(() => ({
   minHeight: '400px',
 }))
 
-function initializeIframe() {
+async function initializeIframe() {
   if (!iframeElement.value) return
-  const doc = iframeElement.value.contentDocument || iframeElement.value.contentWindow?.document
-  if (!doc) return
   const { computedBg, theme } = computeIframeBackgroundTheme({ preferredElementId: 'slide-content' })
-  const p5LoadUrl = getP5LoadUrl({ version: props.p5Version, cdnUrl: props.p5CdnUrl })
+  const p5ScriptUrls = getP5ScriptUrls({
+    version: props.p5Version,
+    cdnUrl: props.p5CdnUrl,
+    soundVersion: props.p5SoundVersion,
+    soundCdnUrl: props.p5SoundCdnUrl,
+    includeSound: props.enableP5Sound,
+  })
   sketchInstanceId.value = createSketchId()
   const html = buildP5IframeHtml({
     computedBg,
     theme,
     sketchInstanceId: sketchInstanceId.value,
-    p5ScriptUrl: p5LoadUrl,
+    p5ScriptUrls,
     includeOriginalConsole: true,
     includeThemeOnAddon: true,
     readyMessageCount: 2,
     requirePositiveCanvasSize: true,
   })
-  doc.open()
-  doc.write(html)
-  doc.close()
+  ;(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string }).__baseHtml = html
+  await resetIframeToBaseHtml(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string })
   iframeWindow.value = iframeElement.value.contentWindow
 }
 
@@ -207,6 +225,17 @@ async function runP5Sketch() {
     // eslint-disable-next-line no-console
     return
   }
+  stopP5SoundPlayback(iframeWindow.value)
+  if (iframeWindow.value.p5 && iframeWindow.value.p5.instance) {
+    try {
+      safeRemoveP5(iframeWindow.value.p5.instance)
+    } catch (e) {
+      void 0
+    }
+  }
+  await resetIframeToBaseHtml(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string })
+  iframeWindow.value = iframeElement.value.contentWindow
+  if (!iframeWindow.value) return
   // Reset iframe size styles before running new sketch
   if (iframeElement.value) {
     iframeElement.value.style.width = 'auto';
@@ -289,7 +318,7 @@ onMounted(() => {
     // eslint-disable-next-line no-console
     slotCode.value = extractCodeFromSlot()
     // eslint-disable-next-line no-console
-    initializeIframe()
+    void initializeIframe()
     startThemeObserver()
     scheduleIframeThemeSync()
     setTimeout(() => {
@@ -373,6 +402,14 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopP5SoundPlayback(iframeWindow.value)
+  if (iframeWindow.value?.p5?.instance) {
+    try {
+      safeRemoveP5(iframeWindow.value.p5.instance)
+    } catch (e) {
+      void 0
+    }
+  }
   stopThemeObserver()
   if (resizeHandler) resizeHandler.stop()
   if (messageHandlerFn) {

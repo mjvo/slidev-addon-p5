@@ -191,7 +191,63 @@ function draw() {
 
 ---
 
-## Feature 5 — Import a snippet in `<P5Canvas>`
+## Feature 5 — Opt-in `p5.sound` in `<P5Code>`
+
+`p5.sound` is disabled by default. Enable it per sketch with `:enable-p5-sound="true"`.
+
+<P5Code :enable-p5-sound="true">
+
+```js {monaco-run}{autorun:false,height:'38vh'}
+const AUDIO_URL = 'audio/loop.mp3';
+const FFT_BINS = 64;
+let song;
+let fft;
+let status = 'Click Run to load audio';
+
+async function setup() {
+  createCanvas(420, 180);
+  status = `Loading ${AUDIO_URL} ...`;
+  try {
+    song = await loadSound(AUDIO_URL);
+    song.loop(true);
+    song.play();
+    status = 'Playing loop.mp3 (FFT bars below)';
+    fft = fft = new p5.FFT(FFT_BINS);
+    song.connect(fft);
+  } catch (err) {
+    status = `Audio load failed: ${String(err)}`;
+  }
+}
+
+function draw() {
+  background(12, 16, 24);
+  fill(230);
+  noStroke();
+  text(status, 12, 20);
+
+  if (!fft) return;
+
+  const spectrum = fft.analyze(FFT_BINS);
+  const barAreaHeight = height - 40;
+  const barWidth = width / spectrum.length;
+
+  noStroke();
+  for (let i = 0; i < spectrum.length; i++) {
+    const amp = spectrum[i];
+    const h = map(amp, 0, 255, 4, barAreaHeight);
+    const x = i * barWidth;
+    const y = height - h - 10;
+    fill(60 + i * 2.2, 220 - i * 1.6, 255, 230);
+    rect(x, y, barWidth - 1, h);
+  }
+}
+```
+
+</P5Code>
+
+---
+
+## Feature 6 — Import a snippet in `<P5Canvas>`
 
 Use Slidev's snippet include syntax to load sketch code from a file:
 
@@ -203,7 +259,7 @@ Use Slidev's snippet include syntax to load sketch code from a file:
 
 ---
 
-## Feature 6 — Import a snippet in `<P5Code>`
+## Feature 7 — Import a snippet in `<P5Code>`
 
 You can do the same in Monaco runner blocks:
 
