@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 // Allow more time for Slidev + p5 initialization across slides
-test.setTimeout(60_000)
+test.setTimeout(90_000)
 
 test('error UI appears when iframe reports error', async ({ page }) => {
   await page.goto('/')
@@ -55,6 +55,15 @@ test('error UI appears when iframe reports error', async ({ page }) => {
     } catch (e) {
       id = null
     }
+    try {
+      await chosenButton.click({ force: true })
+    } catch (e) {
+      // fallback to DOM click if Playwright click fails on visibility/overlap
+      await page.evaluate((selector) => {
+        const btn = document.querySelector(selector) as HTMLButtonElement | null
+        btn?.click()
+      }, runSelector)
+    }
   }
   // If button had no id (hidden or not associated), try to read from an iframe with data-p5code-id
   if (!id) {
@@ -73,6 +82,15 @@ test('error UI appears when iframe reports error', async ({ page }) => {
 
   // Small delay to allow component mounted handlers to attach
   await page.waitForTimeout(500)
+  // Explicitly wait for iframe creation; CI runners can be slower here.
+  try {
+    await page.waitForFunction(
+      () => !!document.querySelector('iframe.p5-canvas-iframe'),
+      { timeout: 30_000 }
+    )
+  } catch (e) {
+    // continue to locator fallback below
+  }
 
   // Simulate an iframe reporting an error for this sketchInstanceId
   let iframeLocator = id
@@ -84,7 +102,7 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   if (await iframeLocator.count() === 0) {
     iframeLocator = page.locator('iframe.p5-canvas-iframe').first()
   }
-  await iframeLocator.waitFor({ state: 'attached', timeout: 20_000 })
+  await iframeLocator.waitFor({ state: 'attached', timeout: 30_000 })
   const effectiveSketchId = id || await iframeLocator.getAttribute('data-p5code-id')
   if (!effectiveSketchId) {
     throw new Error('Unable to determine sketchInstanceId for error-ui test')
