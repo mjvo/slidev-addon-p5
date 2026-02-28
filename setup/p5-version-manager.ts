@@ -22,6 +22,7 @@ const SUPPORTED_VERSIONS: Record<string, string> = {
  * Update this when a new version is released and tested
  */
 export const LATEST_P5_VERSION = '2.2.0';
+export const LATEST_P5_SOUND_VERSION = '0.2.0';
 
 /**
  * Get the CDN URL for a specific p5.js version
@@ -126,6 +127,9 @@ export const validateVersion = (version?: string): string | undefined => {
 export interface P5VersionConfig {
   version?: string; // Specific version to load (e.g., '2.2.0')
   cdnUrl?: string;  // Override with custom CDN URL (for self-hosted)
+  soundVersion?: string; // Optional p5.sound version (defaults to latest tested)
+  soundCdnUrl?: string; // Optional p5.sound CDN URL override
+  includeSound?: boolean; // Whether to include p5.sound script (default false)
 }
 
 /**
@@ -154,4 +158,44 @@ export const getP5LoadUrl = (config?: P5VersionConfig): string => {
 
   // Default to latest
   return getP5CDNUrl();
+};
+
+/**
+ * Get the CDN URL for p5.sound.
+ *
+ * Defaults to the latest tested p5.sound version.
+ */
+export const getP5SoundCDNUrl = (version?: string): string => {
+  const normalized = version?.replace(/^v/, '').trim();
+  const resolvedVersion = normalized || LATEST_P5_SOUND_VERSION;
+  return `https://cdn.jsdelivr.net/npm/p5.sound@${resolvedVersion}/dist/p5.sound.min.js`;
+};
+
+/**
+ * Get the final p5.sound URL (or undefined when disabled).
+ */
+export const getP5SoundLoadUrl = (config?: P5VersionConfig): string | undefined => {
+  if (config?.includeSound !== true) {
+    return undefined;
+  }
+
+  if (config?.soundCdnUrl) {
+    return config.soundCdnUrl;
+  }
+
+  return getP5SoundCDNUrl(config?.soundVersion);
+};
+
+/**
+ * Build script URL list in required order:
+ * 1) p5 core
+ * 2) optional p5.sound extension (only when includeSound is true)
+ */
+export const getP5ScriptUrls = (config?: P5VersionConfig): string[] => {
+  const urls = [getP5LoadUrl(config)];
+  const p5SoundUrl = getP5SoundLoadUrl(config);
+  if (p5SoundUrl) {
+    urls.push(p5SoundUrl);
+  }
+  return urls;
 };

@@ -16,8 +16,8 @@
 - Iframe execution for reliable mouse/keyboard input.
 - Global-mode-to-instance-mode transpilation for safer reruns.
 - Console bridge to Monaco output (`log`, `warn`, `error`).
-- Stop button next to Run (`noLoop()`).
-- Per-sketch p5 loading via version or custom CDN URL.
+- Stop button next to Run (`noLoop()` + active p5.sound source stop).
+- Per-sketch p5 loading, plus opt-in p5.sound loading via version or custom CDN URLs.
 
 ## Install
 
@@ -83,6 +83,22 @@ function draw() {
 ### Optional p5 source control
 
 `p5Version` chooses a supported version. `p5CdnUrl` overrides version selection.
+`p5.sound` is opt-in. Set `enableP5Sound` to `true` to load it (defaults to
+`p5.sound@0.2.0`, overridable via `p5SoundVersion` or `p5SoundCdnUrl`).
+
+Quick opt-in example:
+
+````md
+<P5Code :enable-p5-sound="true">
+```js {monaco-run}{autorun:false}
+function setup() {
+  createCanvas(320, 120);
+  print(typeof p5.Oscillator === 'function' ? 'p5.sound loaded' : 'p5.sound missing');
+  noLoop();
+}
+```
+</P5Code>
+````
 
 ````md
 <P5Canvas :p5-version="'2.1.0'">
@@ -94,6 +110,14 @@ function setup() { createCanvas(300, 300); }
 
 ````md
 <P5Canvas :p5-cdn-url="'https://cdn.jsdelivr.net/npm/p5@2.2.0/lib/p5.min.js'">
+```js
+function setup() { createCanvas(300, 300); }
+```
+</P5Canvas>
+````
+
+````md
+<P5Canvas :enable-p5-sound="true">
 ```js
 function setup() { createCanvas(300, 300); }
 ```
