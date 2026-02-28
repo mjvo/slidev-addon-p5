@@ -98,7 +98,15 @@ test('error UI appears when iframe reports error', async ({ page }) => {
     throw new Error('Unable to access iframe content frame for error-ui test')
   }
   await frame.evaluate((sketchId) => {
-    window.parent.postMessage({ type: 'p5-error', sketchInstanceId: sketchId, error: 'Simulated runtime error' }, window.location.origin)
+    const parentOrigin = (() => {
+      try {
+        if (document.referrer) return new URL(document.referrer).origin
+      } catch (e) {
+        void e
+      }
+      return '*'
+    })()
+    window.parent.postMessage({ type: 'p5-error', sketchInstanceId: sketchId, error: 'Simulated runtime error' }, parentOrigin)
   }, effectiveSketchId)
 
   // Assert error UI appears (allow extra time for UI injection)

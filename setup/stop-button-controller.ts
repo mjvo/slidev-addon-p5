@@ -80,13 +80,11 @@ export class StopButtonController {
       const instance = maybeP5?.instance;
       if (instance && typeof instance.noLoop === 'function') {
         instance.noLoop();
-        this.appendLog('[p5] Loop stopped - draw() will not execute');
         handled = true;
       }
 
       const stoppedSounds = stopP5SoundPlayback(this.iframeWindow);
       if (stoppedSounds > 0) {
-        this.appendLog(`[p5] Stopped ${stoppedSounds} active audio source(s)`);
         handled = true;
       }
 
@@ -97,8 +95,7 @@ export class StopButtonController {
         if (frame) {
           const reset = await resetIframeToBaseHtml(frame);
           if (reset) {
-          this.appendLog('[p5] Sketch runtime reset');
-          handled = true;
+            handled = true;
           }
         }
       } catch (e) {
@@ -106,6 +103,7 @@ export class StopButtonController {
       }
 
       if (handled) {
+        this.appendLog('Stopped. Click the play button to start again.');
         this.button.style.display = 'none';
       }
     } catch (error: unknown) {
