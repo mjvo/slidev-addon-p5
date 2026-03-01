@@ -1,17 +1,37 @@
 import { test, expect } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 // Allow more time for Slidev + p5 initialization across slides
 test.setTimeout(90_000)
+
+async function advanceUntilP5RunnerVisible(page: Page, maxSteps = 20) {
+  const hasRunner = async (): Promise<boolean> => {
+    const runButtons = page.locator('button[title="Run code"]')
+    const count = await runButtons.count()
+    if (count > 0) return true
+    return page.locator('[data-p5code-id], iframe.p5-canvas-iframe').first().count().then((n) => n > 0)
+  }
+
+  if (await hasRunner()) return
+
+  for (let i = 0; i < maxSteps; i += 1) {
+    try {
+      await page.keyboard.press('ArrowRight')
+    } catch (e) {
+      void e
+    }
+    await page.waitForTimeout(250)
+    if (await hasRunner()) return
+  }
+}
 
 test('error UI appears when iframe reports error', async ({ page }) => {
   await page.goto('/')
   await page.click('body')
   // Wait for Slidev to render the slide content
   await page.waitForSelector('.slidev-page, .slidev-page-main, #slide-content', { timeout: 10_000 })
-  // Wait for Monaco runner controls or p5 marker nodes before selecting target slide
-  await page.waitForFunction(() => {
-    return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
-  }, { timeout: 20_000 })
+  // On some CI runs Slidev lazily mounts slide content; walk forward until a p5 runner is visible.
+  await advanceUntilP5RunnerVisible(page, 24)
   // Navigate directly to the first slide that contains p5 code (avoids flaky ArrowRight navigation)
   await page.waitForFunction(() => typeof window !== 'undefined', { timeout: 10_000 })
   const targetSlideNo = await page.evaluate(() => {
@@ -26,6 +46,7 @@ test('error UI appears when iframe reports error', async ({ page }) => {
       // continue — we'll search the DOM for run buttons or iframes as a fallback
     }
   }
+  await advanceUntilP5RunnerVisible(page, 24)
 
   // Find a visible Run button within the current slide, or fall back to any run button in DOM
   const runSelector = 'button.slidev-icon-btn[title="Run code"], button[title="Run code"]'
