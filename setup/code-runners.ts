@@ -24,18 +24,8 @@ import { defineCodeRunnersSetup } from "@slidev/types";
 import * as acorn from "acorn";
 import { transpileGlobalToInstance } from "./p5-transpile";
 import p5Main from "./p5-main";
-// loop-protect is used to instrument user code to guard against infinite loops
-// We `require` it dynamically to avoid bundler/top-level import issues in some Slidev setups.
-/* eslint-disable @typescript-eslint/no-var-requires */
-let loopProtect: ((code: string, opts?: Record<string, unknown>) => string) | undefined
-try {
-  const maybeRequire = (globalThis as { require?: (id: string) => unknown }).require
-  const lp = typeof maybeRequire === 'function' ? maybeRequire('loop-protect') : undefined
-  if (typeof lp === 'function') loopProtect = lp as (code: string, opts?: Record<string, unknown>) => string
-} catch (e) {
-  void 0
-}
-/* eslint-enable @typescript-eslint/no-var-requires */
+import { instrumentLoops } from "./loop-guard";
+import { TIMING_CONFIG } from "./config";
 import type { P5Instance } from '../types'
 import { findSourcePlayButton } from "./play-button-finder";
 import { findP5Container } from "./container-discovery";
@@ -676,16 +666,11 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
     try {
       // **CRITICAL**: Capture the play button BEFORE p5 execution
       const sourcePlayButton = findSourcePlayButton(document.activeElement as HTMLElement);
-      // Instrument user code with loop-protect (if available) to guard infinite loops
-      let codeToTranspile = code
-      try {
-        if (loopProtect) {
-          // Provide a simple id so errors can be correlated if needed
-          codeToTranspile = loopProtect(code, { id: `lp-${Date.now()}` })
-        }
-      } catch (e) {
-        void 0
-      }
+      // Instrument user code to guard against infinite loops.
+      const codeToTranspile = instrumentLoops(code, {
+        timeoutMs: TIMING_CONFIG.loopGuardTimeoutMs,
+        sketchId: `runner-${Date.now()}`,
+      })
 
       // Transpile global mode to instance mode
       transpiled = transpileGlobalToInstance(codeToTranspile);

@@ -129,6 +129,7 @@ function setup() { createCanvas(300, 300); }
 - Threat model: trusted-only slide content. This addon assumes the slide author controls code fences passed to `<P5Canvas>` / `<P5Code>`.
 - p5 snippets are detected with AST-based signals (lifecycle hooks, `new p5(...)`, and common p5 sketch calls) with regex fallback if parsing fails.
 - Runner execution waits briefly for iframe-local p5 to finish loading before returning a not-ready error.
+- Infinite-loop protection is built in: loop statements are instrumented and throw an explicit timeout error (default `100ms`) when exceeded.
 - Keep code inside `<P5Canvas>` or `<P5Code>` slots for correct extraction/execution.
 - Non-p5 code is delegated to Slidev's JS runner when available. If unavailable, the addon returns an error instead of executing code locally.
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.

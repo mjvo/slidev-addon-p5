@@ -25,6 +25,7 @@ export const ADDON_CONFIG = {
     DEBOUNCE_MS: 100, // Debounce delay for resize events
     POLL_MS: 500, // Polling interval for canvas size changes
     OBSERVER_THRESHOLD: 0, // IntersectionObserver threshold
+    loopGuardTimeoutMs: 100, // Maximum loop runtime before guard throws
   },
 
   // Logging configuration

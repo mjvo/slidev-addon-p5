@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import * as runners from '../../setup/code-runners'
+import { instrumentLoops } from '../../setup/loop-guard'
+import { transpileGlobalToInstance } from '../../setup/p5-transpile'
 
 describe('executeInIframeContext', () => {
   it('returns error when iframe window not accessible', async () => {
@@ -55,5 +57,63 @@ describe('isLikelyP5Sketch', () => {
       add(1, 2)
     `
     expect(runners.isLikelyP5Sketch(code)).toBeFalsy()
+  })
+
+  it('keeps loop-guarded sketches detectable as p5', () => {
+    const guarded = instrumentLoops(`
+      function setup() {
+        createCanvas(20, 20)
+      }
+      while (true) {}
+    `, { timeoutMs: 5, sketchId: 'runner-detect' })
+    expect(runners.isLikelyP5Sketch(guarded)).toBeTruthy()
+  })
+})
+
+describe('loop guard + transpile pipeline', () => {
+  it('throws quickly for infinite loops after instrumentation + transpilation', () => {
+    const source = `
+      function setup() {
+        createCanvas(10, 10)
+      }
+      while (true) {}
+    `
+    const guarded = instrumentLoops(source, { timeoutMs: 3, sketchId: 'runner-timeout' })
+    const transpiled = transpileGlobalToInstance(guarded)
+    expect(transpiled).toBeTruthy()
+
+    const DateMock = {
+      now: (() => {
+        let t = 0
+        return () => {
+          t += 2
+          return t
+        }
+      })(),
+    }
+
+    const execute = new Function('p', 'Date', `const _p = p; ${transpiled as string}`)
+    expect(() => execute({ createCanvas: () => void 0 }, DateMock)).toThrow(/Infinite loop protection triggered/)
+  })
+
+  it('keeps normal sketches runnable after instrumentation + transpilation', () => {
+    const source = `
+      function setup() {
+        createCanvas(10, 10)
+      }
+      function draw() {
+        noLoop()
+      }
+    `
+    const guarded = instrumentLoops(source, { timeoutMs: 25, sketchId: 'runner-ok' })
+    const transpiled = transpileGlobalToInstance(guarded)
+    expect(transpiled).toBeTruthy()
+
+    const p = {
+      createCanvas: () => void 0,
+      noLoop: () => void 0,
+    }
+    const execute = new Function('p', `const _p = p; ${transpiled as string}`)
+    expect(() => execute(p)).not.toThrow()
   })
 })

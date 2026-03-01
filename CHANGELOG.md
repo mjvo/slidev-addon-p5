@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 - Start 1.0.4-dev development cycle.
 
+### Changed
+- Replaced the unmaintained `loop-protect` dependency with an in-repo AST loop guard (`setup/loop-guard.ts`) used by `P5Canvas`, `P5Code`, and `setup/code-runners.ts`; loop timeouts now throw explicit runtime errors (default `100ms`, via `TIMING_CONFIG.loopGuardTimeoutMs`).
+
+### Tests
+- Added loop-guard unit coverage (`tests/unit/loop-guard.spec.ts`) and runner/transpile integration assertions in `tests/unit/code-runners.spec.ts` for timeout and normal execution paths.
+
 ## 1.0.3 - 2026-02-28
 
 ### Added

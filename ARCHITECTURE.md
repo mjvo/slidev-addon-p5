@@ -1,6 +1,6 @@
 # slidev-addon-p5 Architecture
 
-Last updated: 2026-02-27
+Last updated: 2026-03-01
 
 This document describes how `slidev-addon-p5` works today.
 
@@ -31,6 +31,7 @@ Both components use iframe-based execution (DOM fallback is removed).
 - `vite.config.mjs`: repo-local Slidev/Vite build override to avoid manual-chunk circular mapping between Monaco types and Shiki in demo builds.
 - `setup/iframe-bootstrap.ts`: shared iframe HTML bootstrap and background/theme resolution used by both components.
 - `setup/p5-transpile.ts`: AST transform from p5 global mode to instance mode (`_p`).
+- `setup/loop-guard.ts`: in-repo AST loop instrumentation (`while`/`for` variants) that throws timeout errors for infinite-loop protection.
 - `setup/iframe-message-handler.ts`: secure postMessage routing with origin checks and message-type handlers.
 - `setup/iframe-resize-handler.ts`: throttled resize handling from iframe messages.
 - `setup/p5-version-manager.ts`: supported p5 versions and URL selection.
@@ -44,7 +45,7 @@ Both components use iframe-based execution (DOM fallback is removed).
 1. Component mounts and creates an iframe document.
 2. p5 is loaded in the iframe via version manager URL.
 3. Code is extracted from slot content (or `code` prop fallback).
-4. User code is loop-protect instrumented when available.
+4. User code is instrumented by the in-repo loop guard before transpilation.
 5. Code is transpiled to instance mode.
 6. Transpiled code is injected via blob-backed `<script>` in iframe.
 7. Iframe posts resize/ready messages; parent resizes iframe and surfaces errors.
@@ -126,6 +127,7 @@ p5.sound loading:
 
 - p5 detection is heuristic (AST signal-based), not a full semantic classifier.
 - Extremely slow or blocked CDN/library loads can still exceed the runner's readiness wait window.
+- Loop guard protects `while`/`for` loop statements, but cannot guarantee termination for recursion or non-loop blocking patterns.
 
 ## Practical Extension Points
 

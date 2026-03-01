@@ -24,21 +24,10 @@ import { ref, onMounted, computed, nextTick, onBeforeUnmount } from 'vue'
 import type { CSSProperties } from 'vue'
 import { createSketchId } from '../setup/id'
 import { transpileGlobalToInstance } from '../setup/p5-transpile'
-// Dynamic require for loop-protect to avoid bundler/runtime issues in some setups
-/* eslint-disable @typescript-eslint/no-var-requires */
-let loopProtect: ((code: string, opts?: Record<string, unknown>) => string) | undefined
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  // @ts-expect-error -- dynamic require may not have types at build time
-  const lp = require('loop-protect')
-  if (typeof lp === 'function') loopProtect = lp
-} catch (e) {
-  void 0
-}
-/* eslint-enable @typescript-eslint/no-var-requires */
+import { instrumentLoops } from '../setup/loop-guard'
 import { getP5ScriptUrls } from '../setup/p5-version-manager'
 import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
-import { SECURITY_CONFIG } from '../setup/config'
+import { SECURITY_CONFIG, TIMING_CONFIG } from '../setup/config'
 import { resetIframeToBaseHtml, safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
 
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
@@ -246,14 +235,10 @@ async function runP5Sketch() {
     iframeElement.value.style.maxHeight = '';
   }
   let codeToRun = slotCode.value || props.code || ''
-  // Instrument user code to prevent infinite loops when possible
-  try {
-    if (typeof loopProtect === 'function') {
-      codeToRun = loopProtect(codeToRun, { id: `lp-${Date.now()}` })
-    }
-  } catch (e) {
-    void 0
-  }
+  codeToRun = instrumentLoops(codeToRun, {
+    timeoutMs: TIMING_CONFIG.loopGuardTimeoutMs,
+    sketchId: sketchInstanceId.value,
+  })
   // eslint-disable-next-line no-console
   let transpiled = ''
   try {

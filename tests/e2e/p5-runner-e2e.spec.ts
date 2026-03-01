@@ -113,6 +113,24 @@ async function navigateToFirstP5CodeSlide(page: Page): Promise<void> {
   }
 }
 
+async function setMonacoCode(page: Page, code: string): Promise<boolean> {
+  return page.evaluate((nextCode) => {
+    const win = window as unknown as {
+      __monaco?: {
+        editor?: {
+          getModels?: () => Array<{ setValue?: (value: string) => void }>
+        }
+      }
+    }
+    const models = win.__monaco?.editor?.getModels?.()
+    if (!models || models.length === 0) return false
+    const editableModel = models.find((model) => typeof model?.setValue === 'function')
+    if (!editableModel || typeof editableModel.setValue !== 'function') return false
+    editableModel.setValue(nextCode)
+    return true
+  }, code)
+}
+
 // Verifies that clicking Run inserts a stop button, renders a canvas inside
 // the mapped iframe, and that the iframe's size reflects the canvas.
 test('Run inserts stop button and iframe resizes', async ({ page }) => {
@@ -214,4 +232,29 @@ test('first Run succeeds when iframe p5 load is delayed', async ({ page }) => {
   const canvas = await waitForP5CanvasInFrame(frame!, 60_000)
   expect(canvas).toBeTruthy()
   await page.unroute(p5ScriptPattern)
+})
+
+test('Run surfaces loop-guard timeout for intentional infinite loop', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForSelector('.slidev-page, .slidev-page-main, #slide-content', { timeout: 20_000 })
+  await page.waitForFunction(() => {
+    return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
+  }, { timeout: 20_000 })
+  await page.click('body')
+  await page.waitForFunction(() => !!(window['__slidev'] || document.querySelector('.slidev-page')), { timeout: 30_000 })
+  await navigateToFirstP5CodeSlide(page)
+
+  const replaced = await setMonacoCode(page, `
+function setup() {
+  createCanvas(80, 80)
+}
+while (true) {}
+`)
+  test.skip(!replaced, 'Monaco model is not exposed in this runtime; cannot inject infinite-loop code deterministically.')
+
+  const clicked = await clickRunButton(page)
+  if (!clicked) throw new Error('No Run button found on page')
+
+  const err = page.locator('.p5-error-boundary .message').first()
+  await expect(err).toContainText('Infinite loop protection triggered', { timeout: 20_000 })
 })

@@ -45,8 +45,7 @@
   "dependencies": {
     "acorn": "^8.11.0",
     "acorn-walk": "^8.3.0",
-    "astring": "^1.8.6",
-    "loop-protect": "^2.1.6"
+    "astring": "^1.8.6"
   },
   "peerDependencies": {
     "@slidev/types": ">=0.47.0",

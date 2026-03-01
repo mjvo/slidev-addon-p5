@@ -17,9 +17,6 @@ importers:
       astring:
         specifier: ^1.8.6
         version: 1.9.0
-      loop-protect:
-        specifier: ^2.1.6
-        version: 2.1.6
       vue:
         specifier: '>=3.0.0'
         version: 3.5.27(typescript@5.9.3)
@@ -2471,9 +2468,6 @@ packages:
 
   longest-streak@3.1.0:
     resolution: {integrity: sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==}
-
-  loop-protect@2.1.6:
-    resolution: {integrity: sha512-eGNk917T5jQ9A/ER/zJlEXCGD/NQepYyLnLBgVPSuspHauG2HUiDx5oKDSpyVQOzGb+yUKMA1k41+Old2ZmcRQ==}
 
   loupe@2.3.7:
     resolution: {integrity: sha512-zSMINGVYkdpYSOBmLi0D1Uo7JU9nVdQKrHxC8eYlV+9YKK9WePqAlL7lSlorG/U2Fw1w0hTBmaa/jrQ3UbPHtA==}
@@ -6525,8 +6519,6 @@ snapshots:
   lodash@4.17.21: {}
 
   longest-streak@3.1.0: {}
-
-  loop-protect@2.1.6: {}
 
   loupe@2.3.7:
     dependencies:

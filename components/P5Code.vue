@@ -46,21 +46,9 @@ import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { getP5ScriptUrls } from '../setup/p5-version-manager'
 import { resetIframeToBaseHtml, safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
 import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
-import { SECURITY_CONFIG } from '../setup/config'
+import { SECURITY_CONFIG, TIMING_CONFIG } from '../setup/config'
+import { instrumentLoops } from '../setup/loop-guard'
 import { nextTick } from 'vue'
-
-// Dynamic require for loop-protect to avoid bundler/runtime issues in some setups
-/* eslint-disable @typescript-eslint/no-var-requires */
-let loopProtect: ((code: string, opts?: Record<string, unknown>) => string) | undefined
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  // @ts-expect-error -- dynamic require used for optional dependency
-  const lp = require('loop-protect')
-  if (typeof lp === 'function') loopProtect = lp
-} catch (e) {
-  void 0
-}
-/* eslint-enable @typescript-eslint/no-var-requires */
 
 interface Props {
   displayOnly?: boolean
@@ -334,14 +322,10 @@ const executeInIframe = async (code: string) => {
 
   try {
     // Inject code via blob URL instead of eval
-    let codeToInject = code
-    try {
-      if (loopProtect) {
-        codeToInject = loopProtect(codeToInject, { id: `lp-${Date.now()}` })
-      }
-    } catch (e) {
-      void e
-    }
+    const codeToInject = instrumentLoops(code, {
+      timeoutMs: TIMING_CONFIG.loopGuardTimeoutMs,
+      sketchId: sketchInstanceId.value,
+    })
     const blob = new Blob([codeToInject], { type: 'text/javascript' })
     const url = URL.createObjectURL(blob)
     const scriptEl = iframeWindow.value.document.createElement('script')
