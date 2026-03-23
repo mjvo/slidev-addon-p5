@@ -4,27 +4,6 @@ import type { Page } from '@playwright/test'
 // Allow more time for Slidev + p5 initialization across slides
 test.setTimeout(90_000)
 
-async function advanceUntilP5RunnerVisible(page: Page, maxSteps = 20) {
-  const hasRunner = async (): Promise<boolean> => {
-    const runButtons = page.locator('button[title="Run code"]')
-    const count = await runButtons.count()
-    if (count > 0) return true
-    return page.locator('[data-p5code-id], iframe.p5-canvas-iframe').first().count().then((n) => n > 0)
-  }
-
-  if (await hasRunner()) return
-
-  for (let i = 0; i < maxSteps; i += 1) {
-    try {
-      await page.keyboard.press('ArrowRight')
-    } catch (e) {
-      void e
-    }
-    await page.waitForTimeout(250)
-    if (await hasRunner()) return
-  }
-}
-
 async function navigateToSlideContainingText(page: Page, text: string): Promise<string | null> {
   await page.waitForFunction((target) => {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
