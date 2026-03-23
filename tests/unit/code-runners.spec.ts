@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import * as runners from '../../setup/code-runners'
 import { instrumentLoops } from '../../setup/loop-guard'
 import { transpileGlobalToInstance } from '../../setup/p5-transpile'
@@ -67,6 +67,29 @@ describe('isLikelyP5Sketch', () => {
       while (true) {}
     `, { timeoutMs: 5, sketchId: 'runner-detect' })
     expect(runners.isLikelyP5Sketch(guarded)).toBeTruthy()
+  })
+})
+
+describe('default setup delegation', () => {
+  it('delegates non-p5 JavaScript to the original Slidev runner', async () => {
+    const originalJsRunner = vi.fn(async (code: string) => ({ text: `base:${code}` }))
+    const baseRunners = {
+      js: originalJsRunner,
+      javascript: originalJsRunner,
+    }
+
+    const result = await runners.default(baseRunners as never)
+    Object.assign(baseRunners, result)
+
+    const out = await baseRunners.js('const x = 1', {
+      options: {},
+      highlight: () => '',
+      run: async () => ({ text: 'nested' }),
+    })
+
+    expect(originalJsRunner).toHaveBeenCalledTimes(1)
+    expect(originalJsRunner).toHaveBeenCalledWith('const x = 1', expect.any(Object))
+    expect(out).toEqual({ text: 'base:const x = 1' })
   })
 })
 

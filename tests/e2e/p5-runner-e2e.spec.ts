@@ -113,6 +113,38 @@ async function navigateToFirstP5CodeSlide(page: Page): Promise<void> {
   }
 }
 
+async function navigateToSlideContainingText(page: Page, text: string): Promise<void> {
+  await page.waitForFunction((target) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const value = walker.currentNode.textContent || ''
+      if (value.includes(target))
+        return true
+    }
+    return false
+  }, text, { timeout: 20_000 })
+
+  const targetSlideNo = await page.evaluate((target) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const value = walker.currentNode.textContent || ''
+      if (!value.includes(target))
+        continue
+      const el = walker.currentNode.parentElement
+      const slideNo = el?.closest('.slidev-page')?.getAttribute('data-slidev-no')
+      if (slideNo)
+        return slideNo
+    }
+    return null
+  }, text)
+
+  if (!targetSlideNo)
+    throw new Error(`No slide found containing text: ${text}`)
+
+  await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
+  await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']:not([style*="display: none"])`, { timeout: 30_000 })
+}
+
 async function setMonacoCode(page: Page, code: string): Promise<boolean> {
   return page.evaluate((nextCode) => {
     const win = window as unknown as {
@@ -257,4 +289,27 @@ while (true) {}
 
   const err = page.locator('.p5-error-boundary .message').first()
   await expect(err).toContainText('Infinite loop protection triggered', { timeout: 20_000 })
+})
+
+test('Run delegates plain JavaScript to Slidev default output', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForSelector('.slidev-page, .slidev-page-main, #slide-content', { timeout: 20_000 })
+  await page.waitForFunction(() => {
+    return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
+  }, { timeout: 20_000 })
+  await page.click('body')
+  await page.waitForFunction(() => !!(window['__slidev'] || document.querySelector('.slidev-page')), { timeout: 30_000 })
+  await navigateToSlideContainingText(page, 'standard Monaco JavaScript still works')
+
+  const activeSlide = page.locator(".slidev-page:not([style*='display: none'])").filter({
+    hasText: 'standard Monaco JavaScript still works',
+  }).first()
+  await expect(activeSlide).toBeVisible({ timeout: 10_000 })
+
+  const runButton = activeSlide.locator('button[title="Run code"]').first()
+  await expect(runButton).toBeVisible({ timeout: 10_000 })
+  await runButton.click()
+
+  await expect(activeSlide.locator('.slidev-runner-output')).toContainText('plain-js-ok', { timeout: 20_000 })
+  await expect(activeSlide.locator('.text-red-500')).toHaveCount(0)
 })

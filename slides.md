@@ -273,6 +273,16 @@ You can do the same in Monaco runner blocks:
 
 ---
 
+## Compatibility — standard Monaco JavaScript still works
+
+The addon should not interfere with Slidev's built-in Monaco JavaScript runner.
+
+```js {monaco-run}{autorun:false}
+console.log('plain-js-ok')
+```
+
+---
+
 # Install the addon
 
 Add to `slides.md` frontmatter:

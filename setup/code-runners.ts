@@ -644,6 +644,8 @@ export {
 };
 
 export default defineCodeRunnersSetup((runner: RunnerType) => {
+  // Preserve Slidev's original JS runner before this setup mutates the shared map.
+  const defaultJsRunner = runner?.js ?? runner?.javascript;
   const customJs: NonNullable<RunnerType['js']> = async (code: string, ctx: unknown) => {
     // Detect p5.js code using AST signals (with regex fallback on parse failures).
     const looksLikeP5 = isLikelyP5Sketch(code);
@@ -653,8 +655,8 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
     
     if (!looksLikeP5) {
       // Not p5 code - fall back to default JavaScript execution via runner
-      if (runner && runner.js) {
-        return runner.js(code, ctx as unknown as JsRunnerCtx);
+      if (defaultJsRunner) {
+        return defaultJsRunner(code, ctx as unknown as JsRunnerCtx);
       }
       return {
         text: 'Error: No default JavaScript runner is available for non-p5 code. This addon only executes p5 sketches.',

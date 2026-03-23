@@ -7,7 +7,9 @@ Test layout
 - E2E tests: `tests/e2e/` — run with `@playwright/test` against a local Slidev dev server.
 - Detection and readiness regressions:
   - `tests/unit/code-runners.spec.ts` covers `isLikelyP5Sketch` classification.
+  - `tests/unit/code-runners.spec.ts` also verifies that non-p5 JavaScript still delegates to Slidev's original Monaco runner after addon setup.
   - `tests/e2e/p5-runner-e2e.spec.ts` includes delayed-iframe-p5-load first-run coverage.
+  - `tests/e2e/p5-runner-e2e.spec.ts` also includes a compatibility check asserting that a plain Monaco JavaScript block still prints to Slidev's standard runner output with the addon installed.
   - `tests/e2e/error-ui.spec.ts` validates iframe `p5-error` messages surface in UI.
 
 NPM scripts
