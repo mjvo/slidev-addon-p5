@@ -25,8 +25,37 @@ async function advanceUntilP5RunnerVisible(page: Page, maxSteps = 20) {
   }
 }
 
-async function getActiveSlide(page: Page) {
-  return page.locator(".slidev-page:not([style*='display: none'])").first()
+async function navigateToSlideContainingText(page: Page, text: string): Promise<string | null> {
+  await page.waitForFunction((target) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const value = walker.currentNode.textContent || ''
+      if (value.includes(target))
+        return true
+    }
+    return false
+  }, text, { timeout: 20_000 })
+
+  const targetSlideNo = await page.evaluate((target) => {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const value = walker.currentNode.textContent || ''
+      if (!value.includes(target))
+        continue
+      const el = walker.currentNode.parentElement
+      const slideNo = el?.closest('.slidev-page')?.getAttribute('data-slidev-no')
+      if (slideNo)
+        return slideNo
+    }
+    return null
+  }, text)
+
+  if (!targetSlideNo)
+    return null
+
+  await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
+  await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']`, { timeout: 30_000 })
+  return targetSlideNo
 }
 
 test('error UI appears when iframe reports error', async ({ page }) => {
@@ -34,31 +63,21 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   await page.click('body')
   // Wait for Slidev to render the slide content
   await page.waitForSelector('.slidev-page, .slidev-page-main, #slide-content', { timeout: 10_000 })
-  // On some CI runs Slidev lazily mounts slide content; walk forward until a p5 runner is visible.
-  await advanceUntilP5RunnerVisible(page, 24)
-  // Navigate directly to the first slide that contains p5 code (avoids flaky ArrowRight navigation)
-  await page.waitForFunction(() => typeof window !== 'undefined', { timeout: 10_000 })
-  const targetSlideNo = await page.evaluate(() => {
-    const el = document.querySelector('[data-p5code-id]') as HTMLElement | null
-    return el?.closest('.slidev-page')?.getAttribute('data-slidev-no') || null
-  })
-  if (targetSlideNo) {
-    await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
-    try {
-      await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']:not([style*="display: none"])`, { timeout: 20_000 })
-    } catch (e) {
-      // continue — we'll search the DOM for run buttons or iframes as a fallback
-    }
-  }
-  await advanceUntilP5RunnerVisible(page, 24)
+  // Navigate directly to the first p5 editor slide by content instead of relying on
+  // visibility heuristics, which can differ between local runs and CI.
+  const targetSlideNo = await navigateToSlideContainingText(
+    page,
+    'instantiate the sketch in the iframe on the right',
+  )
+  if (!targetSlideNo)
+    throw new Error('Unable to locate the primary P5Code slide for error-ui test')
 
-  const activeSlide = await getActiveSlide(page)
-  await expect(activeSlide.locator('[data-p5code-id]').first()).toBeVisible({ timeout: 20_000 })
+  const targetSlide = page.locator(`.slidev-page[data-slidev-no='${targetSlideNo}']`).first()
 
   // Find the visible Run button for the active p5 slide only.
   const runSelector = 'button.slidev-icon-btn[title="Run code"], button[title="Run code"]'
   let chosenButton = null
-  const runButtons = activeSlide.locator(runSelector)
+  const runButtons = targetSlide.locator(runSelector)
   const count = await runButtons.count()
   if (count > 0) {
     for (let i = 0; i < count; i++) {
@@ -86,18 +105,17 @@ test('error UI appears when iframe reports error', async ({ page }) => {
     try {
       await chosenButton.click({ force: true })
     } catch (e) {
-      // Fallback to DOM click scoped to the visible slide if Playwright click fails on overlap.
-      await page.evaluate((selector) => {
-        const active = Array.from(document.querySelectorAll('.slidev-page'))
-          .find(el => !((el as HTMLElement).style.display || '').includes('none'))
-        const btn = active?.querySelector(selector) as HTMLButtonElement | null
+      // Fallback to DOM click scoped to the known slide if Playwright click fails on overlap.
+      await page.evaluate(({ slideNo, selector }) => {
+        const slide = document.querySelector(`.slidev-page[data-slidev-no="${slideNo}"]`)
+        const btn = slide?.querySelector(selector) as HTMLButtonElement | null
         btn?.click()
-      }, runSelector)
+      }, { slideNo: targetSlideNo, selector: runSelector })
     }
   }
   // If button had no id (hidden or not associated), try to read from an iframe with data-p5code-id
   if (!id) {
-    const iframeWithId = activeSlide.locator('iframe.p5-canvas-iframe[data-p5code-id]').first()
+    const iframeWithId = targetSlide.locator('iframe.p5-canvas-iframe[data-p5code-id]').first()
     const iframeCount = await iframeWithId.count()
     if (iframeCount > 0) {
       id = await iframeWithId.getAttribute('data-p5code-id')
@@ -115,11 +133,8 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   // Explicitly wait for iframe creation; CI runners can be slower here.
   try {
     await page.waitForFunction(
-      () => {
-        const active = Array.from(document.querySelectorAll('.slidev-page'))
-          .find(el => !((el as HTMLElement).style.display || '').includes('none'))
-        return !!active?.querySelector('iframe.p5-canvas-iframe')
-      },
+      (slideNo) => !!document.querySelector(`.slidev-page[data-slidev-no="${slideNo}"] iframe.p5-canvas-iframe`),
+      targetSlideNo,
       { timeout: 30_000 }
     )
   } catch (e) {
@@ -128,13 +143,13 @@ test('error UI appears when iframe reports error', async ({ page }) => {
 
   // Simulate an iframe reporting an error for this sketchInstanceId
   let iframeLocator = id
-    ? activeSlide.locator(`iframe.p5-canvas-iframe[data-p5code-id="${id}"]`).first()
-    : activeSlide.locator('iframe.p5-canvas-iframe').first()
+    ? targetSlide.locator(`iframe.p5-canvas-iframe[data-p5code-id="${id}"]`).first()
+    : targetSlide.locator('iframe.p5-canvas-iframe').first()
   if (await iframeLocator.count() === 0) {
-    iframeLocator = activeSlide.locator('iframe.p5-canvas-iframe[data-p5code-id]').first()
+    iframeLocator = targetSlide.locator('iframe.p5-canvas-iframe[data-p5code-id]').first()
   }
   if (await iframeLocator.count() === 0) {
-    iframeLocator = activeSlide.locator('iframe.p5-canvas-iframe').first()
+    iframeLocator = targetSlide.locator('iframe.p5-canvas-iframe').first()
   }
   await iframeLocator.waitFor({ state: 'attached', timeout: 30_000 })
   const effectiveSketchId = id || await iframeLocator.getAttribute('data-p5code-id')
@@ -162,6 +177,6 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   }, effectiveSketchId)
 
   // Assert error UI appears (allow extra time for UI injection)
-  const err = activeSlide.locator('.p5-error-boundary .message').first()
+  const err = targetSlide.locator('.p5-error-boundary .message').first()
   await expect(err).toContainText('Simulated runtime error', { timeout: 20_000 })
 })
