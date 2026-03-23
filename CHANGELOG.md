@@ -2,9 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
-
-- Start 1.0.4-dev development cycle.
+## 1.0.4 - 2026-03-23
 
 ### Changed
 - Replaced the unmaintained `loop-protect` dependency with an in-repo AST loop guard (`setup/loop-guard.ts`) used by `P5Canvas`, `P5Code`, and `setup/code-runners.ts`; loop timeouts now throw explicit runtime errors (default `100ms`, via `TIMING_CONFIG.loopGuardTimeoutMs`).
@@ -15,6 +13,10 @@ All notable changes to this project will be documented in this file.
 ### Tests
 - Added loop-guard unit coverage (`tests/unit/loop-guard.spec.ts`) and runner/transpile integration assertions in `tests/unit/code-runners.spec.ts` for timeout and normal execution paths.
 - Added regression coverage for default-runner delegation in `tests/unit/code-runners.spec.ts` and Playwright coverage for plain Monaco JavaScript compatibility in `tests/e2e/p5-runner-e2e.spec.ts`.
+- Stabilized `tests/e2e/error-ui.spec.ts` by targeting the intended p5 editor slide by content instead of relying on CI-sensitive slide visibility heuristics.
+
+### Docs
+- Added a compatibility smoke-test slide showing that Slidev's standard Monaco JavaScript runner still works with the addon installed.
 
 ## 1.0.3 - 2026-02-28
 
