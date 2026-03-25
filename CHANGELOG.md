@@ -2,9 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
-
-- Start 1.0.5-dev development cycle.
+## 1.0.5 - 2026-03-25
 
 ### Added
 - Added `externalP5Libs` / `:external-p5-libs` support so `P5Canvas` and `P5Code` can load additional author-provided libraries inside the sketch iframe after p5 core and optional `p5.sound`.
