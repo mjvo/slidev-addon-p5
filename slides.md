@@ -249,7 +249,81 @@ function draw() {
 
 ---
 
-## Feature 6 — Import a snippet in `<P5Canvas>`
+## Feature 6a — External p5 libs in global mode
+
+This example implements the [ml5js](https://ml5js.org/) library via CDN using the `:external-p5-libs` prop. Most external libraries can be implemented in global mode. If a library needs to be configured in instance mode, you can do that in the sketch code (see next slide for the p5.grain example).
+
+<P5Code :external-p5-libs="['https://unpkg.com/ml5@1/dist/ml5.js']">
+
+```js {monaco-run}{autorun:false,height:'46vh'}
+let video;
+let handPose;
+let hands = [];
+
+function gotHands(results) {
+  hands = results;
+}
+
+async function setup() {
+  createCanvas(533, 400);
+
+  video = createCapture(VIDEO, { flipped: true });
+  video.size(width, height);
+  video.hide();
+
+  handPose = await ml5.handPose({ flipped: true });
+  handPose.detectStart(video, gotHands);
+}
+
+function draw() {
+  background(0);
+  image(video, 0, 0, width, height);
+
+  for (const hand of hands) {
+    for (const keypoint of hand.keypoints) {
+      fill(0, 255, 0);
+      noStroke();
+      circle(keypoint.x, keypoint.y, 10);
+    }
+
+    const thumb = hand.keypoints[4];
+    const indexFinger = hand.keypoints[8];
+    stroke(0, 255, 255);
+    strokeWeight(4);
+    line(thumb.x, thumb.y, indexFinger.x, indexFinger.y);
+  }
+}
+```
+
+</P5Code>
+
+---
+
+## Feature 6b — External p5 libs in instance mode
+
+In this `:external-p5-libs` example, the [`p5.grain`](https://github.com/josephmiclaus/p5.grain) library needs to be implemented in "instance" mode.
+
+<P5Code :external-p5-libs="['https://cdn.jsdelivr.net/npm/p5.grain/dist/p5.grain.min.js']">
+
+```js {monaco-run}{autorun:false,height:'40vh'}
+function setup() {
+  createCanvas(400, 400);
+  // slidev-addon-p5 runs sketches in p5 instance mode, so configure
+  // p5.grain against the current sketch instance rather than global mode.
+  p5grain.setup({ instance: this, random: this.random.bind(this) });
+  background(255);
+  noStroke();
+  fill(100, 100, 240);
+  circle(width / 2, height / 2, min(width, height) / 2);
+
+  this.applyMonochromaticGrain(42);
+}
+```
+</P5Code>
+
+---
+
+## Feature 7a — Import a snippet in `<P5Canvas>`
 
 Use Slidev's snippet include syntax to load sketch code from a file:
 
@@ -261,7 +335,7 @@ Use Slidev's snippet include syntax to load sketch code from a file:
 
 ---
 
-## Feature 7 — Import a snippet in `<P5Code>`
+## Feature 8b — Import a snippet in `<P5Code>`
 
 You can do the same in Monaco runner blocks:
 

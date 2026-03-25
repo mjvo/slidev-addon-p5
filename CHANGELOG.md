@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Start 1.0.5-dev development cycle.
+
+### Added
+- Added `externalP5Libs` / `:external-p5-libs` support so `P5Canvas` and `P5Code` can load additional author-provided libraries inside the sketch iframe after p5 core and optional `p5.sound`.
+- Added demo slides covering both global-style and instance-aware external library usage, including ml5 HandPose and `p5.grain`.
+
+### Tests
+- Added unit coverage for external library URL validation, deduplication, and iframe script ordering.
+- Added a Playwright smoke test that loads a local external helper library inside the sketch iframe and verifies it is usable at runtime.
+
+### Docs
+- Documented `externalP5Libs` usage patterns for both global-style and instance-aware external libraries.
+
 ## 1.0.4 - 2026-03-23
 
 ### Changed

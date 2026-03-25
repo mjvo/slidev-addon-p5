@@ -85,6 +85,8 @@ function draw() {
 `p5Version` chooses a supported version. `p5CdnUrl` overrides version selection.
 `p5.sound` is opt-in. Set `enableP5Sound` to `true` to load it (defaults to
 `p5.sound@0.2.0`, overridable via `p5SoundVersion` or `p5SoundCdnUrl`).
+`externalP5Libs` loads additional scripts inside the sketch iframe after p5 and
+optional p5.sound.
 
 Quick opt-in example:
 
@@ -117,6 +119,47 @@ function setup() { createCanvas(300, 300); }
 ````
 
 ````md
+<P5Canvas :external-p5-libs="['/vendor/ml5.min.js']">
+```js
+function setup() {
+  createCanvas(300, 300);
+  print(typeof ml5 !== 'undefined' ? 'ml5 loaded' : 'ml5 missing');
+  noLoop();
+}
+```
+</P5Canvas>
+````
+
+Global-style external lib pattern:
+
+````md
+<P5Code :external-p5-libs="['https://unpkg.com/ml5@1/dist/ml5.js']">
+```js {monaco-run}{autorun:false}
+let handPose;
+
+async function setup() {
+  createCanvas(320, 240);
+  handPose = await ml5.handPose();
+}
+```
+</P5Code>
+````
+
+Instance-aware external lib pattern:
+
+````md
+<P5Code :external-p5-libs="['https://cdn.jsdelivr.net/npm/p5.grain/dist/p5.grain.min.js']">
+```js {monaco-run}{autorun:false}
+function setup() {
+  createCanvas(320, 240);
+  p5grain.setup({ instance: this, random: this.random.bind(this) });
+  this.applyMonochromaticGrain(42);
+}
+```
+</P5Code>
+````
+
+````md
 <P5Canvas :enable-p5-sound="true">
 ```js
 function setup() { createCanvas(300, 300); }
@@ -127,6 +170,7 @@ function setup() { createCanvas(300, 300); }
 ## Notes and limits
 
 - Threat model: trusted-only slide content. This addon assumes the slide author controls code fences passed to `<P5Canvas>` / `<P5Code>`.
+- Additional iframe scripts loaded via `externalP5Libs` are also treated as trusted author-controlled input.
 - p5 snippets are detected with AST-based signals (lifecycle hooks, `new p5(...)`, and common p5 sketch calls) with regex fallback if parsing fails.
 - Runner execution waits briefly for iframe-local p5 to finish loading before returning a not-ready error.
 - Infinite-loop protection is built in: loop statements are instrumented and throw an explicit timeout error (default `100ms`) when exceeded.
@@ -135,6 +179,7 @@ function setup() { createCanvas(300, 300); }
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
 - Iframe runtime errors are surfaced in the inline error boundary and also recorded in the iframe logs panel.
 - Iframe preview background follows Slidev theme toggles live (including `d` dark/light switch during slideshow).
+- Extra scripts are loaded only inside the sketch iframe, not the parent Slidev document. Exported decks still fetch those script URLs at runtime, so prefer local `public/` assets or other trusted, stable sources.
 
 - Permissions (camera & microphone): the preview iframes are created with `allow="camera; microphone; autoplay; display-capture"` so sketches can call `navigator.mediaDevices.getUserMedia()` when needed. Browsers require a secure context (HTTPS) or `localhost` to grant media device access; users must grant permission in the browser UI. Serving slides over `file://` or plain HTTP will prevent getUserMedia from working.
 - Troubleshooting: if you see `ReferenceError: VIDEO is not defined`, upgrade to a version that includes p5 constant transpilation for `VIDEO`/`AUDIO` in instance mode.
@@ -199,6 +244,7 @@ Key files:
 - Runtime runner: `setup/code-runners.ts`
 - Components: `components/P5Canvas.vue`, `components/P5Code.vue`
 - Transpiler: `setup/p5-transpile.ts`
+- Script URL selection/validation: `setup/p5-version-manager.ts`
 - Message/resize handlers: `setup/iframe-message-handler.ts`, `setup/iframe-resize-handler.ts`
 
 See:

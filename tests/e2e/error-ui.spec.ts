@@ -1,47 +1,14 @@
 import { test, expect } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import { navigateToSlideContainingText, waitForSlidevDeckReady } from './helpers'
 
 // Allow more time for Slidev + p5 initialization across slides
 test.setTimeout(90_000)
-
-async function navigateToSlideContainingText(page: Page, text: string): Promise<string | null> {
-  await page.waitForFunction((target) => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const value = walker.currentNode.textContent || ''
-      if (value.includes(target))
-        return true
-    }
-    return false
-  }, text, { timeout: 20_000 })
-
-  const targetSlideNo = await page.evaluate((target) => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const value = walker.currentNode.textContent || ''
-      if (!value.includes(target))
-        continue
-      const el = walker.currentNode.parentElement
-      const slideNo = el?.closest('.slidev-page')?.getAttribute('data-slidev-no')
-      if (slideNo)
-        return slideNo
-    }
-    return null
-  }, text)
-
-  if (!targetSlideNo)
-    return null
-
-  await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
-  await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']`, { timeout: 30_000 })
-  return targetSlideNo
-}
 
 test('error UI appears when iframe reports error', async ({ page }) => {
   await page.goto('/')
   await page.click('body')
   // Wait for Slidev to render the slide content
-  await page.waitForSelector('.slidev-page, .slidev-page-main, #slide-content', { timeout: 10_000 })
+  await waitForSlidevDeckReady(page)
   // Navigate directly to the first p5 editor slide by content instead of relying on
   // visibility heuristics, which can differ between local runs and CI.
   const targetSlideNo = await navigateToSlideContainingText(

@@ -1,6 +1,6 @@
 # slidev-addon-p5 Architecture
 
-Last updated: 2026-03-01
+Last updated: 2026-03-25
 
 This document describes how `slidev-addon-p5` works today.
 
@@ -8,6 +8,7 @@ This document describes how `slidev-addon-p5` works today.
 
 - The addon assumes trusted-only slide content.
 - Code fences provided to `<P5Canvas>` and `<P5Code>` are treated as author-controlled input.
+- Additional iframe script URLs provided via component props are also treated as trusted author-controlled input.
 
 ## Purpose
 
@@ -103,8 +104,8 @@ Typical transform:
 
 ## Version Loading
 
-`setup/p5-version-manager.ts` supports pinned versions and custom CDN URLs for both
-p5 core and p5.sound.
+`setup/p5-version-manager.ts` supports pinned versions, custom CDN URLs for both
+p5 core and p5.sound, and validated author-provided extra iframe scripts.
 
 Precedence:
 1. `p5CdnUrl` prop (highest)
@@ -117,6 +118,12 @@ p5.sound loading:
 3. latest tested `p5.sound` version (`0.2.0`) when enabled
 4. skipped unless `enableP5Sound` is `true`
 
+Extra script loading:
+1. `externalP5Libs` prop values are validated and deduplicated
+2. accepted URLs are loaded only inside the sketch iframe
+3. load order is: p5 core, optional p5.sound, then `externalP5Libs` in author-provided order
+4. accepted URL forms are `https://...`, `http://localhost...`, `http://127.0.0.1...`, and relative/root-relative URLs
+
 ## Testing and CI
 
 - Unit tests: `tests/unit` (Vitest)
@@ -128,6 +135,7 @@ p5.sound loading:
 - p5 detection is heuristic (AST signal-based), not a full semantic classifier.
 - Extremely slow or blocked CDN/library loads can still exceed the runner's readiness wait window.
 - Loop guard protects `while`/`for` loop statements, but cannot guarantee termination for recursion or non-loop blocking patterns.
+- Exported decks still fetch any configured extra iframe scripts at runtime, so remote script mutability remains part of the trust model.
 
 ## Practical Extension Points
 

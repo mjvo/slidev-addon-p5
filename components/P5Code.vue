@@ -57,6 +57,7 @@ interface Props {
   p5SoundVersion?: string // Optional p5.sound version (defaults to latest tested)
   p5SoundCdnUrl?: string // Custom CDN URL for p5.sound
   enableP5Sound?: boolean // Set false to skip loading p5.sound
+  externalP5Libs?: string[] // Additional author-provided scripts loaded after p5/p5.sound
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -66,6 +67,7 @@ const props = withDefaults(defineProps<Props>(), {
   p5SoundVersion: undefined, // Use latest tested p5.sound
   p5SoundCdnUrl: undefined, // Use CDN URL determined by version
   enableP5Sound: false, // Load p5.sound only when explicitly enabled
+  externalP5Libs: undefined,
 })
 
 const iframeElement = ref<HTMLIFrameElement>()
@@ -172,6 +174,7 @@ const initializeIframe = async () => {
     soundVersion: props.p5SoundVersion,
     soundCdnUrl: props.p5SoundCdnUrl,
     includeSound: props.enableP5Sound,
+    externalP5Libs: props.externalP5Libs,
   })
   const { computedBg, theme } = computeIframeBackgroundTheme({
     preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
@@ -180,7 +183,7 @@ const initializeIframe = async () => {
     computedBg,
     theme,
     sketchInstanceId: sketchInstanceId.value,
-    p5ScriptUrls,
+    scriptUrls: p5ScriptUrls,
     includeOriginalConsole: true,
     includeThemeOnAddon: true,
     includeBodyTextColor: true,
@@ -304,12 +307,13 @@ const executeInIframe = async (code: string) => {
     computedBg,
     theme,
     sketchInstanceId: sketchInstanceId.value,
-    p5ScriptUrls: getP5ScriptUrls({
+    scriptUrls: getP5ScriptUrls({
       version: props.p5Version,
       cdnUrl: props.p5CdnUrl,
       soundVersion: props.p5SoundVersion,
       soundCdnUrl: props.p5SoundCdnUrl,
       includeSound: props.enableP5Sound,
+      externalP5Libs: props.externalP5Libs,
     }),
     includeOriginalConsole: true,
   })
@@ -401,7 +405,10 @@ onMounted(() => {
   }
 
   // Always initialize iframe (DOM fallback removed)
-  void initializeIframe()
+  void initializeIframe().catch((error: unknown) => {
+    const msg = (error as { message?: unknown } | null)?.message
+    errorMessage.value = typeof msg === 'string' ? msg : String(error)
+  })
   startThemeObserver()
   scheduleIframeThemeSync()
 

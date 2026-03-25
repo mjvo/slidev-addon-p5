@@ -130,7 +130,76 @@ export interface P5VersionConfig {
   soundVersion?: string; // Optional p5.sound version (defaults to latest tested)
   soundCdnUrl?: string; // Optional p5.sound CDN URL override
   includeSound?: boolean; // Whether to include p5.sound script (default false)
+  externalP5Libs?: string[]; // Additional author-provided scripts loaded after p5/p5.sound
 }
+
+const LOCAL_URL_BASE = 'http://slidev-addon.local';
+const DISALLOWED_SCRIPT_PROTOCOLS = new Set(['javascript:', 'data:', 'blob:', 'file:']);
+const LOCALHOST_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+const hasExplicitScheme = (value: string): boolean => /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(value);
+
+/**
+ * Validate and normalize an author-provided extra script URL.
+ *
+ * Allowed:
+ * - https://...
+ * - http://localhost...
+ * - http://127.0.0.1...
+ * - root-relative and relative URLs
+ */
+export const normalizeExtraScriptUrl = (url: string): string => {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    throw new Error('externalP5Libs entries must be non-empty strings.');
+  }
+
+  if (trimmed.startsWith('//')) {
+    throw new Error(`Protocol-relative script URLs are not allowed: ${trimmed}`);
+  }
+
+  const parsed = new URL(trimmed, LOCAL_URL_BASE);
+  if (DISALLOWED_SCRIPT_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error(`Unsupported script URL protocol for ${trimmed}.`);
+  }
+
+  if (!hasExplicitScheme(trimmed)) {
+    return trimmed;
+  }
+
+  if (parsed.protocol === 'https:') {
+    return parsed.toString();
+  }
+
+  if (parsed.protocol === 'http:' && LOCALHOST_HOSTS.has(parsed.hostname)) {
+    return parsed.toString();
+  }
+
+  throw new Error(
+    `Unsupported script URL "${trimmed}". Use https, localhost/127.0.0.1, or a relative URL.`
+  );
+};
+
+/**
+ * Validate, normalize, and deduplicate author-provided extra script URLs.
+ */
+export const getExtraScriptUrls = (config?: P5VersionConfig): string[] => {
+  const values = config?.externalP5Libs ?? [];
+  const deduped = new Set<string>();
+  const urls: string[] = [];
+
+  for (const value of values) {
+    if (typeof value !== 'string') {
+      throw new Error('externalP5Libs entries must be strings.');
+    }
+    const normalized = normalizeExtraScriptUrl(value);
+    if (deduped.has(normalized)) continue;
+    deduped.add(normalized);
+    urls.push(normalized);
+  }
+
+  return urls;
+};
 
 /**
  * Get the final CDN URL with validation
@@ -197,5 +266,6 @@ export const getP5ScriptUrls = (config?: P5VersionConfig): string[] => {
   if (p5SoundUrl) {
     urls.push(p5SoundUrl);
   }
+  urls.push(...getExtraScriptUrls(config));
   return urls;
 };

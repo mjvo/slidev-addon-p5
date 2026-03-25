@@ -43,6 +43,7 @@ const props = withDefaults(defineProps<{
   p5SoundVersion?: string
   p5SoundCdnUrl?: string
   enableP5Sound?: boolean
+  externalP5Libs?: string[]
 }>(), {
   code: undefined,
   p5Version: undefined,
@@ -50,6 +51,7 @@ const props = withDefaults(defineProps<{
   p5SoundVersion: undefined,
   p5SoundCdnUrl: undefined,
   enableP5Sound: false,
+  externalP5Libs: undefined,
 })
 const slots = useSlots()
 const slotCode = ref<string | null>(null)
@@ -82,13 +84,14 @@ async function initializeIframe() {
     soundVersion: props.p5SoundVersion,
     soundCdnUrl: props.p5SoundCdnUrl,
     includeSound: props.enableP5Sound,
+    externalP5Libs: props.externalP5Libs,
   })
   sketchInstanceId.value = createSketchId()
   const html = buildP5IframeHtml({
     computedBg,
     theme,
     sketchInstanceId: sketchInstanceId.value,
-    p5ScriptUrls,
+    scriptUrls: p5ScriptUrls,
     includeOriginalConsole: true,
     includeThemeOnAddon: true,
     readyMessageCount: 2,
@@ -303,7 +306,10 @@ onMounted(() => {
     // eslint-disable-next-line no-console
     slotCode.value = extractCodeFromSlot()
     // eslint-disable-next-line no-console
-    void initializeIframe()
+    void initializeIframe().catch((error: unknown) => {
+      const msg = (error as { message?: unknown } | null)?.message
+      errorMessage.value = typeof msg === 'string' ? msg : String(error)
+    })
     startThemeObserver()
     scheduleIframeThemeSync()
     setTimeout(() => {
