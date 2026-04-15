@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.7 - 2026-04-15
+
+### Fixed
+- Published the finalized post-`1.0.6` stability fixes as a new npm release after the prior `1.0.6` publish was withdrawn.
+- Fixed `P5Canvas` iframe sizing so square and high-DPI / WEBGL sketches keep their intended display width.
+- Fixed stale `sketchInstanceId` filtering in iframe resize handling so both `P5Canvas` and `P5Code` continue to resize correctly after reruns and iframe reinitialization.
+- Restored stable top alignment for `P5Code` previews after resize updates.
+- Switched TypeScript module resolution to `Bundler` so CI passes under current TypeScript without deprecated `node10` behavior.
+- Restored the missing Playwright helper import used by the plain-JavaScript runner delegation regression test.
+
+### Tests
+- Added unit coverage for iframe resize sizing heuristics and dynamic sketch-id matching.
+- Kept typecheck, lint, unit tests, demo build, and Playwright coverage aligned with the finalized release state.
+
+### Docs
+- Refreshed demo and snippet example canvas sizes to match the current sizing behavior and expected slide output.
+
 ## 1.0.6 - 2026-04-15
 
 ### Changed
