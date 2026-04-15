@@ -43,16 +43,16 @@ import { createSketchId } from '../setup/id'
 import type { CSSProperties } from 'vue'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
-import { getP5ScriptUrls } from '../setup/p5-version-manager'
-import { resetIframeToBaseHtml, safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
-import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
+import { safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
+import { applyThemeToIframeDocument, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG, TIMING_CONFIG } from '../setup/config'
 import { instrumentLoops } from '../setup/loop-guard'
 import { nextTick } from 'vue'
+import { getAllowedMessageOrigins, getIframeConsoleMessage, getIframeErrorMessage, pushIframeLog, resetIframePresentation, resetP5Iframe, type P5IframeLogEntry } from '../setup/iframe-runtime'
 
 interface Props {
   displayOnly?: boolean
-  p5Version?: string   // Specific p5.js version to load (e.g., '2.2.0', '2.1.0')
+  p5Version?: string   // Specific p5.js version to load (e.g., '2.2.2', '2.1.0')
   p5CdnUrl?: string    // Custom CDN URL for p5.js (overrides version if set)
   p5SoundVersion?: string // Optional p5.sound version (defaults to latest tested)
   p5SoundCdnUrl?: string // Custom CDN URL for p5.sound
@@ -73,13 +73,13 @@ const props = withDefaults(defineProps<Props>(), {
 const iframeElement = ref<HTMLIFrameElement>()
 const iframeWindow = ref<Window | null>(null)
 const iframeAllow = SECURITY_CONFIG.iframeAllow
-const iframeReady = ref(false)  // Track if iframe has initialized
 const errorMessage = ref<string | null>(null)
-const iframeLogs = ref<Array<{ level?: string; args?: unknown[]; sketchInstanceId?: string; ts?: string }>>([])
+const iframeLogs = ref<P5IframeLogEntry[]>([])
 const messageHandler = ref<IframeMessageHandler | null>(null)  // Handler for iframe messages (Monaco/editor-specific)
 const messageHandlerFn = ref<((event: MessageEvent) => void) | null>(null)  // Stable function reference for addEventListener/removeEventListener
 let resizeHandler: IframeResizeHandler | null = null
 const sketchInstanceId = ref<string>(createSketchId())
+const allowedMessageOrigins = getAllowedMessageOrigins()
 
 // Note: message routing is delegated to `IframeMessageHandler` via `messageHandlerFn` below.
 
@@ -152,47 +152,19 @@ const initializeIframe = async () => {
   // Generate a new sketchInstanceId for each iframe init
   sketchInstanceId.value = createSketchId()
   iframe.setAttribute('data-p5code-id', sketchInstanceId.value)
-
-  // Completely clear all inline styles to ensure clean slate
-  iframe.style.cssText = ''
-  iframe.style.setProperty('width', 'auto', 'important')
-  iframe.style.setProperty('height', '400px', 'important')
-  iframe.style.setProperty('min-height', '400px', 'important')
-  iframe.style.setProperty('max-height', 'none', 'important')
-
-  // Also reset parent container styles
-  const container = iframe.parentElement
-  if (container) {
-    container.style.minHeight = ''
-    container.style.maxHeight = ''
-  }
-
-  // Determine p5.js CDN URL based on version prop
-  const p5ScriptUrls = getP5ScriptUrls({
+  resetIframePresentation(iframe)
+  iframeWindow.value = await resetP5Iframe({
+    iframe: iframe as HTMLIFrameElement & { __baseHtml?: string },
+    sketchInstanceId: sketchInstanceId.value,
     version: props.p5Version,
     cdnUrl: props.p5CdnUrl,
     soundVersion: props.p5SoundVersion,
     soundCdnUrl: props.p5SoundCdnUrl,
     includeSound: props.enableP5Sound,
     externalP5Libs: props.externalP5Libs,
-  })
-  const { computedBg, theme } = computeIframeBackgroundTheme({
     preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
-  })
-  const html = buildP5IframeHtml({
-    computedBg,
-    theme,
-    sketchInstanceId: sketchInstanceId.value,
-    scriptUrls: p5ScriptUrls,
-    includeOriginalConsole: true,
-    includeThemeOnAddon: true,
     includeBodyTextColor: true,
   })
-  ;(iframe as HTMLIFrameElement & { __baseHtml?: string }).__baseHtml = html
-
-  await resetIframeToBaseHtml(iframe as HTMLIFrameElement & { __baseHtml?: string })
-
-  iframeWindow.value = iframe.contentWindow
 }
 
 const syncIframeTheme = () => {
@@ -246,14 +218,11 @@ const registerLogHandlers = () => {
     if (!messageHandler.value) return
     messageHandler.value.registerHandler('p5-console', (data: unknown) => {
       try {
-        const d = data as { level?: string; args?: unknown[]; sketchInstanceId?: string }
-        const level = (d && d.level) ? d.level : 'log'
-        const args = (d && Array.isArray(d.args)) ? d.args : []
+        const { level, args, sketchInstanceId } = getIframeConsoleMessage(data)
         // also mirror to parent console
         // eslint-disable-next-line no-console
         console[level] ? console[level]('[iframe p5]', ...args) : console.log('[iframe p5]', ...args)
-        iframeLogs.value.push({ level, args, sketchInstanceId: d.sketchInstanceId, ts: new Date().toISOString() })
-        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+        pushIframeLog(iframeLogs.value, { level, args, sketchInstanceId })
       } catch (e) { /* ignore */ }
     })
   } catch (e) { /* ignore */ }
@@ -269,58 +238,21 @@ const executeInIframe = async (code: string) => {
     return { error: 'Iframe not ready' }
   }
   stopP5SoundPlayback(iframeWindow.value)
-  // Reset iframe size styles before running new sketch
-  /* console.log('[P5Code] Resetting iframe size before sketch:', {
-    width: iframeElement.value.style.width,
-    height: iframeElement.value.style.height,
-    minWidth: iframeElement.value.style.minWidth,
-    minHeight: iframeElement.value.style.minHeight,
-    maxWidth: iframeElement.value.style.maxWidth,
-    maxHeight: iframeElement.value.style.maxHeight,
-  }); */
-  iframeElement.value.style.width = 'auto';
-  iframeElement.value.style.height = '400px';
-  iframeElement.value.style.minWidth = '';
-  iframeElement.value.style.minHeight = '';
-  iframeElement.value.style.maxWidth = '';
-  iframeElement.value.style.maxHeight = '';
-  /* console.log('[P5Code] After reset:', {
-    width: iframeElement.value.style.width,
-    height: iframeElement.value.style.height,
-    minWidth: iframeElement.value.style.minWidth,
-    minHeight: iframeElement.value.style.minHeight,
-    maxWidth: iframeElement.value.style.maxWidth,
-    maxHeight: iframeElement.value.style.maxHeight,
-  }); */
-  const container = iframeElement.value.parentElement
-  if (container) {
-    container.style.minHeight = ''
-    container.style.maxHeight = ''
-  }
+  resetIframePresentation(iframeElement.value, { clearMinWidth: true })
 
   // This ensures a clean state, especially when navigating between slides
   // The iframe document persists across slide navigation, so we need to reset it
-  const { computedBg, theme } = computeIframeBackgroundTheme({
+  iframeWindow.value = await resetP5Iframe({
+    iframe: iframeElement.value as HTMLIFrameElement & { __baseHtml?: string },
+    sketchInstanceId: sketchInstanceId.value,
+    version: props.p5Version,
+    cdnUrl: props.p5CdnUrl,
+    soundVersion: props.p5SoundVersion,
+    soundCdnUrl: props.p5SoundCdnUrl,
+    includeSound: props.enableP5Sound,
+    externalP5Libs: props.externalP5Libs,
     preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
   })
-  const html = buildP5IframeHtml({
-    computedBg,
-    theme,
-    sketchInstanceId: sketchInstanceId.value,
-    scriptUrls: getP5ScriptUrls({
-      version: props.p5Version,
-      cdnUrl: props.p5CdnUrl,
-      soundVersion: props.p5SoundVersion,
-      soundCdnUrl: props.p5SoundCdnUrl,
-      includeSound: props.enableP5Sound,
-      externalP5Libs: props.externalP5Libs,
-    }),
-    includeOriginalConsole: true,
-  })
-  ;(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string }).__baseHtml = html
-
-  await resetIframeToBaseHtml(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string })
-  iframeWindow.value = iframeElement.value.contentWindow
   if (!iframeWindow.value) return { error: 'Iframe not ready after reset' }
   scheduleIframeThemeSync()
 
@@ -414,14 +346,13 @@ onMounted(() => {
 
   // Use the shared IframeResizeHandler for resize messages, passing sketchInstanceId
   resizeHandler = new IframeResizeHandler({
-    allowedOrigins: [window.location.origin],
+    allowedOrigins: allowedMessageOrigins,
     sketchInstanceId: sketchInstanceId.value,
     expectedSource: () => iframeElement.value?.contentWindow ?? null,
     requireSketchInstanceId: true,
     onResize: (width, height, incomingSketchId) => {
       if (incomingSketchId && incomingSketchId !== sketchInstanceId.value) {
-        console.log('[P5Code] Ignoring resize for old sketchInstanceId', incomingSketchId, 'current:', sketchInstanceId.value);
-        return;
+        return
       }
       iframeElement.value.style.setProperty('width', `${width}px`, 'important')
       iframeElement.value.style.setProperty('height', `${height}px`, 'important')
@@ -439,30 +370,25 @@ onMounted(() => {
 
   // Monaco/editor-specific message handling (ready, error, execution complete)
   messageHandler.value = new IframeMessageHandler({
-    onReady: () => {
-      iframeReady.value = true
-    },
+    onReady: () => {},
     onResize: () => {}, // Handled by resizeHandler
     onError: (data: unknown) => {
       try {
-        const d = data as { sketchInstanceId?: string; error?: unknown; message?: unknown } | null
+        const details = getIframeErrorMessage(data)
         // Only surface errors intended for this sketch instance
-        if (d && d.sketchInstanceId && d.sketchInstanceId !== sketchInstanceId.value) return
-        const msg = (d && (d.error || d.message)) ? (d.error || d.message) : JSON.stringify(d)
-        errorMessage.value = String(msg)
-        iframeLogs.value.push({ level: 'error', args: [String(msg)], sketchInstanceId: d?.sketchInstanceId, ts: new Date().toISOString() })
-        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+        if (details.sketchInstanceId && details.sketchInstanceId !== sketchInstanceId.value) return
+        errorMessage.value = details.message
+        pushIframeLog(iframeLogs.value, { level: 'error', args: [details.message], sketchInstanceId: details.sketchInstanceId })
       } catch (e) {
         errorMessage.value = String(data)
-        iframeLogs.value.push({ level: 'error', args: [String(data)], sketchInstanceId: sketchInstanceId.value, ts: new Date().toISOString() })
-        if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+        pushIframeLog(iframeLogs.value, { level: 'error', args: [String(data)], sketchInstanceId: sketchInstanceId.value })
       }
       console.error('[p5 addon] Error in iframe:', data)
     },
     onExecutionComplete: () => {
       // Code execution completed
     },
-    allowedOrigins: [window.location.origin],
+    allowedOrigins: allowedMessageOrigins,
     expectedSource: () => iframeElement.value?.contentWindow ?? null,
     requireSketchInstanceId: true,
     expectedSketchInstanceId: () => sketchInstanceId.value,
@@ -506,12 +432,8 @@ onMounted(() => {
   // All message types routed through messageHandler via `createMessageHandler`
 })
 
-// Dismiss errors when component unmounts
 onBeforeUnmount(() => {
   errorMessage.value = null
-})
-
-onBeforeUnmount(() => {
   cleanupP5()
   stopThemeObserver()
   if (resizeHandler) resizeHandler.stop()

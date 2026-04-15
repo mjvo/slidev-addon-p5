@@ -91,6 +91,40 @@ describe('default setup delegation', () => {
     expect(originalJsRunner).toHaveBeenCalledWith('const x = 1', expect.any(Object))
     expect(out).toEqual({ text: 'base:const x = 1' })
   })
+
+  it('returns an explicit error when a p5 Run action cannot be matched to an iframe', async () => {
+    const originalDocument = globalThis.document
+    vi.stubGlobal('document', {
+      activeElement: null,
+      querySelector: () => null,
+    } as Partial<Document>)
+
+    try {
+      const baseRunners = {
+        js: vi.fn(),
+        javascript: vi.fn(),
+      }
+
+      const result = await runners.default(baseRunners as never)
+      Object.assign(baseRunners, result)
+
+      const out = await baseRunners.js(`
+        function setup() {
+          createCanvas(10, 10)
+        }
+      `, {
+        options: {},
+        highlight: () => '',
+        run: async () => ({ text: 'nested' }),
+      })
+
+      expect(out).toEqual({
+        text: 'Error: Unable to match the Run button to a p5 iframe. Try rerendering the slide and running again.',
+      })
+    } finally {
+      vi.stubGlobal('document', originalDocument)
+    }
+  })
 })
 
 describe('loop guard + transpile pipeline', () => {

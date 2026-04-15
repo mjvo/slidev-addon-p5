@@ -9,6 +9,7 @@
  *
  * Validates message origins against an allowed list for security.
  */
+import { SECURITY_CONFIG } from './config'
 
 /**
  * Configuration for iframe message handlers
@@ -50,13 +51,7 @@ interface MessageHandlerConfig {
  */
 export class IframeMessageHandler {
   private handlers = new Map<string, (data: ResizeData | ErrorData | unknown) => void>();
-  private allowedOrigins = [
-    'http://localhost',
-    'http://127.0.0.1',
-    'http://localhost:5173',
-    'http://localhost:3030',
-    'http://localhost:8080',
-  ];
+  private allowedOrigins: string[] = [...SECURITY_CONFIG.allowedOrigins];
   // Track the last applied resize to avoid redundant calls
   private lastResize?: { width: number; height: number };
   // Throttle window and state for resize events

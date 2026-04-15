@@ -10,7 +10,7 @@
 export interface P5AddonGlobals {
   // Console and logging
   appendLog?: (msg: string) => void;
-  logs?: string[];
+  logs?: Array<{ level?: string; args?: unknown[] }>;
   originalLog?: typeof console.log;
   originalError?: typeof console.error;
   originalWarn?: typeof console.warn;
@@ -18,13 +18,16 @@ export interface P5AddonGlobals {
   // Stop button management
   insertStopButton?: (btn: HTMLElement) => void;
   sourcePlayButton?: HTMLElement | null;
+  sketchInstanceId?: string;
+  theme?: 'light' | 'dark';
+  instance?: unknown;
 
   // Lifecycle callbacks
   onReady?: () => void;
 }
 
 /**
- * Declare global Window interface to include __p5Addon, p5, and eval
+ * Declare global Window interface to include __p5Addon and p5
  */
 declare global {
   interface Window {
@@ -33,10 +36,6 @@ declare global {
     // p5.js instance when in global mode
     // In instance mode (used by this addon), p5 is accessed via variable
     p5?: unknown;
-
-    // Standard JavaScript eval function
-    // Redeclared here for clarity (already exists on Window, but TypeScript sometimes needs explicit declaration)
-    eval: (code: string) => unknown;
   }
 }
 

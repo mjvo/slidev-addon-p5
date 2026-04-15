@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.6 - 2026-04-15
+
+### Changed
+- Refactored shared iframe runtime concerns into `setup/iframe-runtime.ts` so `P5Canvas` and `P5Code` share script URL resolution, iframe reset, log trimming, and message-origin handling.
+- Simplified `setup/config.ts` to keep active runtime config in one place and routed stop-button styling through the shared config.
+- Pinned local `@slidev/types` development dependency to the currently validated version instead of tracking `latest`.
+
+### Fixed
+- Stabilized the `error-ui` Playwright coverage by targeting the active visible slide/iframe instead of relying on the first matching slide clone in the DOM.
+- Replaced silent runner failures with explicit actionable iframe-association errors when a Run button cannot be matched to a p5 iframe.
+- Removed the `P5Canvas` autorun timing delay in favor of chaining the first run to iframe initialization completion.
+- Expanded the transpiler's p5 global inventory for newer p5.js 2.2+ APIs, including shader/strands helpers such as `buildFilterShader()` and related WebGL globals.
+- Updated the default validated p5 runtime from `2.2.0` to `2.2.2`, which fixes `build*Shader()` support in instance-mode iframe sketches.
+- Bridged p5.strands shader helpers like `mix()` into the iframe runtime for `build*Shader()` callbacks without broadening normal global-mode transpilation.
+
+### Tests
+- Added regression coverage for the explicit runner error path when no iframe can be matched.
+- Added an iframe runtime regression that injects `buildFilterShader()` smoke-test code into Monaco so p5.strands shader builders are validated in-browser without depending on a dedicated demo slide.
+- CI now runs frozen-lockfile install, typecheck, package-content verification, and a demo build smoke step in addition to lint, unit, and E2E tests.
+
 ## 1.0.5 - 2026-03-25
 
 ### Added

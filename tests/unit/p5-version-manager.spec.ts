@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   getExtraScriptUrls,
+  getSupportedVersions,
   LATEST_P5_SOUND_VERSION,
   LATEST_P5_VERSION,
   getP5LoadUrl,
@@ -12,6 +13,12 @@ import {
 describe('p5-version-manager', () => {
   it('returns latest p5 URL by default', () => {
     expect(getP5LoadUrl()).toBe(`https://cdn.jsdelivr.net/npm/p5@${LATEST_P5_VERSION}/lib/p5.min.js`)
+  })
+
+  it('exposes the validated latest version first in the supported list', () => {
+    expect(LATEST_P5_VERSION).toBe('2.2.2')
+    expect(getSupportedVersions()[0]).toBe('2.2.2')
+    expect(getSupportedVersions()).toContain('2.2.0')
   })
 
   it('does not return p5.sound URL by default', () => {

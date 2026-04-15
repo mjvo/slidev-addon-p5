@@ -25,15 +25,16 @@ import type { CSSProperties } from 'vue'
 import { createSketchId } from '../setup/id'
 import { transpileGlobalToInstance } from '../setup/p5-transpile'
 import { instrumentLoops } from '../setup/loop-guard'
-import { getP5ScriptUrls } from '../setup/p5-version-manager'
-import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
+import { applyThemeToIframeDocument, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG, TIMING_CONFIG } from '../setup/config'
-import { resetIframeToBaseHtml, safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
+import { safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
+import { getShaderDslBridgeScript } from '../setup/p5-shader-dsl'
 
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import P5ErrorBoundary from './P5ErrorBoundary.vue'
 import P5LogPanel from './P5LogPanel.vue'
+import { getAllowedMessageOrigins, getIframeConsoleMessage, getIframeErrorMessage, pushIframeLog, resetIframePresentation, resetP5Iframe, type P5IframeLogEntry } from '../setup/iframe-runtime'
 
 import { useSlots, onUpdated } from 'vue'
 const props = withDefaults(defineProps<{
@@ -64,8 +65,9 @@ let messageHandler: IframeMessageHandler | null = null
 let messageHandlerFn: ((event: MessageEvent) => void) | null = null
 let themeObserver: MutationObserver | null = null
 let themeSyncFrame: number | null = null
-const iframeLogs = ref<Array<{ level?: string; args?: unknown[]; sketchInstanceId?: string; ts?: string }>>([])
+const iframeLogs = ref<P5IframeLogEntry[]>([])
 const sketchInstanceId = ref<string>(createSketchId())
+const allowedMessageOrigins = getAllowedMessageOrigins()
 
 const wrapperStyle = computed(() => ({
   display: 'flex',
@@ -77,29 +79,22 @@ const wrapperStyle = computed(() => ({
 
 async function initializeIframe() {
   if (!iframeElement.value) return
-  const { computedBg, theme } = computeIframeBackgroundTheme({ preferredElementId: 'slide-content' })
-  const p5ScriptUrls = getP5ScriptUrls({
+  resetIframePresentation(iframeElement.value, { clearMinWidth: true })
+  sketchInstanceId.value = createSketchId()
+  iframeWindow.value = await resetP5Iframe({
+    iframe: iframeElement.value as HTMLIFrameElement & { __baseHtml?: string },
+    sketchInstanceId: sketchInstanceId.value,
     version: props.p5Version,
     cdnUrl: props.p5CdnUrl,
     soundVersion: props.p5SoundVersion,
     soundCdnUrl: props.p5SoundCdnUrl,
     includeSound: props.enableP5Sound,
     externalP5Libs: props.externalP5Libs,
-  })
-  sketchInstanceId.value = createSketchId()
-  const html = buildP5IframeHtml({
-    computedBg,
-    theme,
-    sketchInstanceId: sketchInstanceId.value,
-    scriptUrls: p5ScriptUrls,
-    includeOriginalConsole: true,
-    includeThemeOnAddon: true,
+    preferredElementId: 'slide-content',
     readyMessageCount: 2,
     requirePositiveCanvasSize: true,
+    includeThemeOnAddon: true,
   })
-  ;(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string }).__baseHtml = html
-  await resetIframeToBaseHtml(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string })
-  iframeWindow.value = iframeElement.value.contentWindow
 }
 
 function syncIframeTheme() {
@@ -214,7 +209,6 @@ function extractCodeFromSlot(): string | null {
 
 async function runP5Sketch() {
   if (!iframeWindow.value) {
-    // eslint-disable-next-line no-console
     return
   }
   stopP5SoundPlayback(iframeWindow.value)
@@ -225,24 +219,28 @@ async function runP5Sketch() {
       void 0
     }
   }
-  await resetIframeToBaseHtml(iframeElement.value as HTMLIFrameElement & { __baseHtml?: string })
-  iframeWindow.value = iframeElement.value.contentWindow
+  iframeWindow.value = await resetP5Iframe({
+    iframe: iframeElement.value as HTMLIFrameElement & { __baseHtml?: string },
+    sketchInstanceId: sketchInstanceId.value,
+    version: props.p5Version,
+    cdnUrl: props.p5CdnUrl,
+    soundVersion: props.p5SoundVersion,
+    soundCdnUrl: props.p5SoundCdnUrl,
+    includeSound: props.enableP5Sound,
+    externalP5Libs: props.externalP5Libs,
+    preferredElementId: 'slide-content',
+    readyMessageCount: 2,
+    requirePositiveCanvasSize: true,
+    includeThemeOnAddon: true,
+  })
   if (!iframeWindow.value) return
   // Reset iframe size styles before running new sketch
-  if (iframeElement.value) {
-    iframeElement.value.style.width = 'auto';
-    iframeElement.value.style.height = '400px';
-    iframeElement.value.style.minWidth = '';
-    iframeElement.value.style.minHeight = '';
-    iframeElement.value.style.maxWidth = '';
-    iframeElement.value.style.maxHeight = '';
-  }
+  resetIframePresentation(iframeElement.value, { clearMinWidth: true })
   let codeToRun = slotCode.value || props.code || ''
   codeToRun = instrumentLoops(codeToRun, {
     timeoutMs: TIMING_CONFIG.loopGuardTimeoutMs,
     sketchId: sketchInstanceId.value,
   })
-  // eslint-disable-next-line no-console
   let transpiled = ''
   try {
     transpiled = transpileGlobalToInstance(codeToRun)
@@ -252,6 +250,7 @@ async function runP5Sketch() {
     errorMessage.value = `Transpile error: ${String(err)}`
     return
   }
+    const shaderDslBridgeCode = getShaderDslBridgeScript('_p')
     // Inject code via blob URL to avoid eval
     try {
       const scriptContent = `
@@ -260,6 +259,7 @@ async function runP5Sketch() {
             try {
               var p5Instance = new window.p5(function(p){
                 const _p = p;
+                ${shaderDslBridgeCode}
                 ${transpiled}
               }, document.getElementById('p5-container'));
               window.__p5Addon.instance = p5Instance;
@@ -302,23 +302,12 @@ async function runP5Sketch() {
 
 onMounted(() => {
   nextTick(() => {
-    // eslint-disable-next-line no-console
-    // eslint-disable-next-line no-console
     slotCode.value = extractCodeFromSlot()
-    // eslint-disable-next-line no-console
-    void initializeIframe().catch((error: unknown) => {
-      const msg = (error as { message?: unknown } | null)?.message
-      errorMessage.value = typeof msg === 'string' ? msg : String(error)
-    })
     startThemeObserver()
     scheduleIframeThemeSync()
-    setTimeout(() => {
-      // eslint-disable-next-line no-console
-      runP5Sketch()
-    }, 300)
     // Use the shared IframeResizeHandler for resize messages, passing sketchInstanceId
     resizeHandler = new IframeResizeHandler({
-      allowedOrigins: [window.location.origin],
+      allowedOrigins: allowedMessageOrigins,
       sketchInstanceId: sketchInstanceId.value,
       expectedSource: () => iframeElement.value?.contentWindow ?? null,
       requireSketchInstanceId: true,
@@ -340,26 +329,23 @@ onMounted(() => {
     // Create a message handler to centralize postMessage handling
     try {
       messageHandler = new IframeMessageHandler({
-        allowedOrigins: [window.location.origin],
+        allowedOrigins: allowedMessageOrigins,
         expectedSource: () => iframeElement.value?.contentWindow ?? null,
         requireSketchInstanceId: true,
         expectedSketchInstanceId: () => sketchInstanceId.value,
         onError: (data) => {
           try {
-            const d = data as { sketchInstanceId?: string; error?: unknown; message?: unknown } | null
-            if (d && d.sketchInstanceId && d.sketchInstanceId !== sketchInstanceId.value) return
-            const msg = (d && (d.error || d.message)) ? (d.error || d.message) : String(d)
-            errorMessage.value = String(msg)
+            const details = getIframeErrorMessage(data)
+            if (details.sketchInstanceId && details.sketchInstanceId !== sketchInstanceId.value) return
+            errorMessage.value = details.message
             // eslint-disable-next-line no-console
-            console.error('[iframe p5 error]', msg)
-            iframeLogs.value.push({ level: 'error', args: [String(msg)], sketchInstanceId: d?.sketchInstanceId, ts: new Date().toISOString() })
-            if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+            console.error('[iframe p5 error]', details.message)
+            pushIframeLog(iframeLogs.value, { level: 'error', args: [details.message], sketchInstanceId: details.sketchInstanceId })
           } catch (e) {
             errorMessage.value = String(data)
             // eslint-disable-next-line no-console
             console.error('[iframe p5 error]', data)
-            iframeLogs.value.push({ level: 'error', args: [String(data)], sketchInstanceId: sketchInstanceId.value, ts: new Date().toISOString() })
-            if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
+            pushIframeLog(iframeLogs.value, { level: 'error', args: [String(data)], sketchInstanceId: sketchInstanceId.value })
           }
         },
         onReady: () => {},
@@ -369,16 +355,11 @@ onMounted(() => {
       try {
         messageHandler.registerHandler('p5-console', (data: unknown) => {
           try {
-            const d = data as { level?: string; args?: unknown[]; sketchInstanceId?: string }
-            const level = (d && d.level) ? d.level : 'log'
-            const args = (d && Array.isArray(d.args)) ? d.args : []
+            const { level, args, sketchInstanceId } = getIframeConsoleMessage(data)
             // Prefix logs so it's clear they came from the iframe
             // eslint-disable-next-line no-console
             console[level] ? console[level]('[iframe p5]', ...args) : console.log('[iframe p5]', ...args)
-            try {
-              iframeLogs.value.push({ level, args, sketchInstanceId: d.sketchInstanceId, ts: new Date().toISOString() })
-              if (iframeLogs.value.length > 1000) iframeLogs.value.splice(0, iframeLogs.value.length - 1000)
-            } catch (e) { /* ignore */ }
+            pushIframeLog(iframeLogs.value, { level, args, sketchInstanceId })
           } catch (e) {
             // ignore
           }
@@ -389,6 +370,12 @@ onMounted(() => {
     } catch (e) {
       void 0
     }
+    void initializeIframe()
+      .then(() => runP5Sketch())
+      .catch((error: unknown) => {
+        const msg = (error as { message?: unknown } | null)?.message
+        errorMessage.value = typeof msg === 'string' ? msg : String(error)
+      })
   })
 })
 
@@ -412,10 +399,7 @@ onBeforeUnmount(() => {
 
 // Re-extract code and rerun sketch if slot content changes
 onUpdated(() => {
-  // eslint-disable-next-line no-console
-  // eslint-disable-next-line no-console
   const newCode = extractCodeFromSlot()
-  // eslint-disable-next-line no-console
   if (newCode && newCode !== slotCode.value) {
     slotCode.value = newCode
     runP5Sketch()

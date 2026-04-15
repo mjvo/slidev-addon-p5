@@ -53,4 +53,40 @@ describe('transpileGlobalToInstance', () => {
     expect(out).toBeTruthy()
     expect(out).toContain(`${P5_NAMESPACE}.createCapture(${P5_NAMESPACE}.VIDEO)`)
   })
+
+  it('rewrites newer p5 2.2+ shader and geometry globals to instance namespace', () => {
+    const code = `
+      function setup() {
+        const shader = buildFilterShader('void main() {}')
+        const material = baseMaterialShader()
+        const geom = buildGeometry(() => {
+          beginClip()
+          box(20)
+          endClip()
+        })
+        const modelData = createModel()
+        const col = paletteLerp(['#000', '#fff'], 0.5)
+        metalness(0.4)
+        strokeShader(shader)
+        imageShader(shader)
+        loadFilterShader('/filter.frag')
+        loadBlob('/asset.bin')
+      }
+    `
+    const out = transpileGlobalToInstance(code)
+    expect(out).toBeTruthy()
+    expect(out).toContain(`${P5_NAMESPACE}.buildFilterShader`)
+    expect(out).toContain(`${P5_NAMESPACE}.baseMaterialShader`)
+    expect(out).toContain(`${P5_NAMESPACE}.buildGeometry`)
+    expect(out).toContain(`${P5_NAMESPACE}.beginClip`)
+    expect(out).toContain(`${P5_NAMESPACE}.endClip`)
+    expect(out).toContain(`${P5_NAMESPACE}.createModel`)
+    expect(out).toContain(`${P5_NAMESPACE}.paletteLerp`)
+    expect(out).toContain(`${P5_NAMESPACE}.metalness`)
+    expect(out).toContain(`${P5_NAMESPACE}.strokeShader`)
+    expect(out).toContain(`${P5_NAMESPACE}.imageShader`)
+    expect(out).toContain(`${P5_NAMESPACE}.loadFilterShader`)
+    expect(out).toContain(`${P5_NAMESPACE}.loadBlob`)
+  })
+
 })

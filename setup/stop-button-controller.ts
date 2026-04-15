@@ -14,6 +14,7 @@
  * The stop button allows users to pause the p5 draw() loop.
  * It's created hidden and shown only when p5 code is executing.
  */
+import { UI_CONFIG } from './config';
 import { resetIframeToBaseHtml, safeRemoveElement, stopP5SoundPlayback } from './p5-utils';
 
 export class StopButtonController {
@@ -47,8 +48,8 @@ export class StopButtonController {
    */
   private createButton(): HTMLElement {
     const btn = document.createElement('button');
-    btn.className = 'slidev-icon-btn w-8 h-8 max-h-full flex justify-center items-center p5-stop-btn';
-    btn.title = 'Stop loop';
+    btn.className = UI_CONFIG.stopButton.className;
+    btn.title = UI_CONFIG.stopButton.title;
     btn.style.cssText = 'display: none;';
 
     // Use inline SVG from Carbon icons design system (outline version)

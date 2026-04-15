@@ -10,6 +10,7 @@
  * Sorted by release date (newest first)
  */
 const SUPPORTED_VERSIONS: Record<string, string> = {
+  '2.2.2': 'https://cdn.jsdelivr.net/npm/p5@2.2.2/lib/p5.min.js',
   '2.2.0': 'https://cdn.jsdelivr.net/npm/p5@2.2.0/lib/p5.min.js',
   '2.1.0': 'https://cdn.jsdelivr.net/npm/p5@2.1.0/lib/p5.min.js',
   '2.0.0': 'https://cdn.jsdelivr.net/npm/p5@2.0.0/lib/p5.min.js',
@@ -21,13 +22,13 @@ const SUPPORTED_VERSIONS: Record<string, string> = {
  * Latest stable version of p5.js
  * Update this when a new version is released and tested
  */
-export const LATEST_P5_VERSION = '2.2.0';
+export const LATEST_P5_VERSION = '2.2.2';
 export const LATEST_P5_SOUND_VERSION = '0.2.0';
 
 /**
  * Get the CDN URL for a specific p5.js version
  *
- * @param version - The desired p5.js version (e.g., '2.2.0')
+ * @param version - The desired p5.js version (e.g., '2.2.2')
  * @returns The CDN URL for the version, or latest if version not found
  *
  * @example
@@ -35,7 +36,7 @@ export const LATEST_P5_SOUND_VERSION = '0.2.0';
  * // Returns: https://cdn.jsdelivr.net/npm/p5@2.1.0/lib/p5.min.js
  *
  * const url = getP5CDNUrl('99.0.0');
- * // Returns: https://cdn.jsdelivr.net/npm/p5@2.2.0/lib/p5.min.js (latest)
+ * // Returns: https://cdn.jsdelivr.net/npm/p5@2.2.2/lib/p5.min.js (latest)
  */
 export const getP5CDNUrl = (version?: string): string => {
   if (!version) {
@@ -68,7 +69,7 @@ export const getP5CDNUrl = (version?: string): string => {
  * @returns True if version is supported, false otherwise
  *
  * @example
- * isVersionSupported('2.2.0');  // true
+ * isVersionSupported('2.2.2');  // true
  * isVersionSupported('99.0.0'); // false
  */
 export const isVersionSupported = (version: string): boolean => {
@@ -82,7 +83,7 @@ export const isVersionSupported = (version: string): boolean => {
  *
  * @example
  * getSupportedVersions();
- * // Returns: ['2.2.0', '2.1.0', '2.0.0', '1.7.0', '1.6.0']
+ * // Returns: ['2.2.2', '2.2.0', '2.1.0', '2.0.0', '1.7.0', '1.6.0']
  */
 export const getSupportedVersions = (): string[] => {
   return Object.keys(SUPPORTED_VERSIONS);
@@ -95,8 +96,8 @@ export const getSupportedVersions = (): string[] => {
  * @returns Normalized version string, or undefined if invalid
  *
  * @example
- * validateVersion('2.2.0');   // '2.2.0'
- * validateVersion('v2.2.0');  // '2.2.0'
+ * validateVersion('2.2.2');   // '2.2.2'
+ * validateVersion('v2.2.2');  // '2.2.2'
  * validateVersion('2.2');     // undefined (incomplete version)
  */
 export const validateVersion = (version?: string): string | undefined => {
@@ -125,7 +126,7 @@ export const validateVersion = (version?: string): string | undefined => {
  * Configuration for p5.js loading
  */
 export interface P5VersionConfig {
-  version?: string; // Specific version to load (e.g., '2.2.0')
+  version?: string; // Specific version to load (e.g., '2.2.2')
   cdnUrl?: string;  // Override with custom CDN URL (for self-hosted)
   soundVersion?: string; // Optional p5.sound version (defaults to latest tested)
   soundCdnUrl?: string; // Optional p5.sound CDN URL override

@@ -18,7 +18,10 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   if (!targetSlideNo)
     throw new Error('Unable to locate the primary P5Code slide for error-ui test')
 
-  const targetSlide = page.locator(`.slidev-page[data-slidev-no='${targetSlideNo}']`).first()
+  const targetSlide = page.locator(".slidev-page:not([style*='display: none'])").filter({
+    hasText: 'instantiate the sketch in the iframe on the right',
+  }).first()
+  await expect(targetSlide).toBeVisible({ timeout: 10_000 })
 
   // Find the visible Run button for the active p5 slide only.
   const runSelector = 'button.slidev-icon-btn[title="Run code"], button[title="Run code"]'
@@ -89,13 +92,13 @@ test('error UI appears when iframe reports error', async ({ page }) => {
 
   // Simulate an iframe reporting an error for this sketchInstanceId
   let iframeLocator = id
-    ? targetSlide.locator(`iframe.p5-canvas-iframe[data-p5code-id="${id}"]`).first()
-    : targetSlide.locator('iframe.p5-canvas-iframe').first()
+    ? targetSlide.locator(`iframe.p5-canvas-iframe[data-p5code-id="${id}"]:visible`).first()
+    : targetSlide.locator('iframe.p5-canvas-iframe:visible').first()
   if (await iframeLocator.count() === 0) {
-    iframeLocator = targetSlide.locator('iframe.p5-canvas-iframe[data-p5code-id]').first()
+    iframeLocator = targetSlide.locator('iframe.p5-canvas-iframe[data-p5code-id]:visible').first()
   }
   if (await iframeLocator.count() === 0) {
-    iframeLocator = targetSlide.locator('iframe.p5-canvas-iframe').first()
+    iframeLocator = page.locator('iframe.p5-canvas-iframe:visible').first()
   }
   await iframeLocator.waitFor({ state: 'attached', timeout: 30_000 })
   const effectiveSketchId = id || await iframeLocator.getAttribute('data-p5code-id')
@@ -123,6 +126,6 @@ test('error UI appears when iframe reports error', async ({ page }) => {
   }, effectiveSketchId)
 
   // Assert error UI appears (allow extra time for UI injection)
-  const err = targetSlide.locator('.p5-error-boundary .message').first()
+  const err = page.locator(".slidev-page:not([style*='display: none']) .p5-error-boundary .message").first()
   await expect(err).toContainText('Simulated runtime error', { timeout: 20_000 })
 })

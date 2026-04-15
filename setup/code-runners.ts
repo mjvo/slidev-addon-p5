@@ -33,7 +33,7 @@ import { getConsoleWrapperScript } from "./console-wrapper";
 import { StopButtonController } from "./stop-button-controller";
 import { CleanupManager } from "./cleanup-manager";
 import { ErrorLineMapper } from "./error-line-mapper";
-import { /* initializeP5Addon, getP5Addon */ } from "./types";
+import { getShaderDslBridgeScript } from "./p5-shader-dsl";
 // Local helper types to avoid `any` in a few cast sites
 type IframeWindowWithAddon = Window & { __p5Addon?: Record<string, unknown>; p5?: { instance?: P5Instance } };
 type ParentWithP5ResizeHooks = HTMLElement & {
@@ -551,6 +551,7 @@ const executeInIframeContext = async (
     iframeWindow.__p5Addon.appendLog = appendLog;
     // Get console wrapper code
     const consoleWrapperCode = getConsoleWrapperScript();
+    const shaderDslBridgeCode = getShaderDslBridgeScript('_p');
     const wrappedCode = `
       ${consoleWrapperCode}
       
@@ -569,6 +570,7 @@ const executeInIframeContext = async (
           let p5Instance;
           p5Instance = new window.p5((p) => {
             const _p = p;
+            ${shaderDslBridgeCode}
             ${wrappedCode}
           }, 'p5-container');
           window.p5.instance = p5Instance;
@@ -702,7 +704,7 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
       }
       // GUARD: If we still have no codeId or iframe, refuse to run silently
       if (!codeId || !iframeElement) {
-        return { text: '' };
+        return { text: 'Error: Unable to match the Run button to a p5 iframe. Try rerendering the slide and running again.' };
       }
       // Try a final discovery for iframe if we still don't have one
       if (!iframeElement) {
@@ -711,7 +713,7 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
       }
       // If still no iframe, refuse to run
       if (!iframeElement) {
-        return { text: '' };
+        return { text: 'Error: No p5 iframe is available for this code block.' };
       }
       // If iframe is present, execute code in iframe context
       if (iframeElement && iframeElement.contentWindow) {

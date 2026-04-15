@@ -111,7 +111,7 @@ function setup() { createCanvas(300, 300); }
 ````
 
 ````md
-<P5Canvas :p5-cdn-url="'https://cdn.jsdelivr.net/npm/p5@2.2.0/lib/p5.min.js'">
+<P5Canvas :p5-cdn-url="'https://cdn.jsdelivr.net/npm/p5@2.2.2/lib/p5.min.js'">
 ```js
 function setup() { createCanvas(300, 300); }
 ```
@@ -180,6 +180,7 @@ function setup() { createCanvas(300, 300); }
 - Iframe runtime errors are surfaced in the inline error boundary and also recorded in the iframe logs panel.
 - Iframe preview background follows Slidev theme toggles live (including `d` dark/light switch during slideshow).
 - Extra scripts are loaded only inside the sketch iframe, not the parent Slidev document. Exported decks still fetch those script URLs at runtime, so prefer local `public/` assets or other trusted, stable sources.
+- `filterColor.texCoord` must be read inside the `filterColor.begin() ... end()` hook scope.
 
 - Permissions (camera & microphone): the preview iframes are created with `allow="camera; microphone; autoplay; display-capture"` so sketches can call `navigator.mediaDevices.getUserMedia()` when needed. Browsers require a secure context (HTTPS) or `localhost` to grant media device access; users must grant permission in the browser UI. Serving slides over `file://` or plain HTTP will prevent getUserMedia from working.
 - Troubleshooting: if you see `ReferenceError: VIDEO is not defined`, upgrade to a version that includes p5 constant transpilation for `VIDEO`/`AUDIO` in instance mode.
