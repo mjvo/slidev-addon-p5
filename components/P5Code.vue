@@ -347,7 +347,7 @@ onMounted(() => {
   // Use the shared IframeResizeHandler for resize messages, passing sketchInstanceId
   resizeHandler = new IframeResizeHandler({
     allowedOrigins: allowedMessageOrigins,
-    sketchInstanceId: sketchInstanceId.value,
+    sketchInstanceId: () => sketchInstanceId.value,
     expectedSource: () => iframeElement.value?.contentWindow ?? null,
     requireSketchInstanceId: true,
     onResize: (width, height, incomingSketchId) => {

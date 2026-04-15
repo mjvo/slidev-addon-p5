@@ -34,6 +34,7 @@ import { StopButtonController } from "./stop-button-controller";
 import { CleanupManager } from "./cleanup-manager";
 import { ErrorLineMapper } from "./error-line-mapper";
 import { getShaderDslBridgeScript } from "./p5-shader-dsl";
+import { measureCanvasDisplaySize } from './iframe-bootstrap';
 // Local helper types to avoid `any` in a few cast sites
 type IframeWindowWithAddon = Window & { __p5Addon?: Record<string, unknown>; p5?: { instance?: P5Instance } };
 type ParentWithP5ResizeHooks = HTMLElement & {
@@ -84,8 +85,9 @@ const scheduleFallbackResize = (
   const sendResize = () => {
     const canvas = iframeWindow.document.querySelector('canvas') as HTMLCanvasElement | null;
     if (canvas) {
-      const width = canvas.offsetWidth + 4;
-      const height = canvas.offsetHeight + 4;
+      const measured = measureCanvasDisplaySize(canvas, iframeWindow);
+      const width = measured.width + 4;
+      const height = measured.height + 4;
       
       // Send message directly to iframe's parent (not broadcast to all windows)
       // This prevents cross-talk between multiple P5Canvas components on same page

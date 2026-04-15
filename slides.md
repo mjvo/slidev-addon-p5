@@ -265,7 +265,7 @@ function gotHands(results) {
 }
 
 async function setup() {
-  createCanvas(533, 400);
+  createCanvas(400, 300);
 
   video = createCapture(VIDEO, { flipped: true });
   video.size(width, height);

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { buildP5IframeHtml } from '../../setup/iframe-bootstrap'
+import { describe, expect, it, vi } from 'vitest'
+import { buildP5IframeHtml, measureCanvasDisplaySize } from '../../setup/iframe-bootstrap'
 
 describe('iframe-bootstrap', () => {
   it('renders provided script URLs into the iframe head in order', () => {
@@ -21,5 +21,40 @@ describe('iframe-bootstrap', () => {
     expect(firstIndex).toBeGreaterThan(-1)
     expect(secondIndex).toBeGreaterThan(firstIndex)
     expect(thirdIndex).toBeGreaterThan(secondIndex)
+  })
+
+  it('prefers intended display size over a shrunken offsetWidth measurement', () => {
+    const canvas = {
+      style: {
+        width: '400px',
+        height: '400px',
+      },
+      width: 800,
+      height: 800,
+      offsetWidth: 200,
+      offsetHeight: 400,
+      clientWidth: 200,
+      clientHeight: 400,
+      getBoundingClientRect: vi.fn(() => ({
+        width: 200,
+        height: 400,
+        top: 0,
+        left: 0,
+        right: 200,
+        bottom: 400,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      })),
+    } as unknown as HTMLCanvasElement
+
+    const measured = measureCanvasDisplaySize(canvas, {
+      devicePixelRatio: 2,
+      getComputedStyle: vi.fn(() => ({
+        width: '200px',
+        height: '400px',
+      } as CSSStyleDeclaration)),
+    })
+    expect(measured).toEqual({ width: 400, height: 400 })
   })
 })

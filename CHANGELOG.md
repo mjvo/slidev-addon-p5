@@ -13,14 +13,21 @@ All notable changes to this project will be documented in this file.
 - Stabilized the `error-ui` Playwright coverage by targeting the active visible slide/iframe instead of relying on the first matching slide clone in the DOM.
 - Replaced silent runner failures with explicit actionable iframe-association errors when a Run button cannot be matched to a p5 iframe.
 - Removed the `P5Canvas` autorun timing delay in favor of chaining the first run to iframe initialization completion.
+- Fixed a `P5Canvas` sizing regression where iframe width could shrink incorrectly on high-DPI / WEBGL sketches by measuring the intended display size instead of trusting `offsetWidth` alone.
+- Fixed stale `sketchInstanceId` filtering in iframe resize handling so both `P5Canvas` and `P5Code` continue to accept resize messages after iframe reinitialization.
+- Restored stable top alignment for `P5Code` previews after resize by removing a shared iframe centering override that conflicted with the editor-side flex layout.
 - Expanded the transpiler's p5 global inventory for newer p5.js 2.2+ APIs, including shader/strands helpers such as `buildFilterShader()` and related WebGL globals.
 - Updated the default validated p5 runtime from `2.2.0` to `2.2.2`, which fixes `build*Shader()` support in instance-mode iframe sketches.
 - Bridged p5.strands shader helpers like `mix()` into the iframe runtime for `build*Shader()` callbacks without broadening normal global-mode transpilation.
 
 ### Tests
 - Added regression coverage for the explicit runner error path when no iframe can be matched.
+- Added unit coverage for iframe resize sizing heuristics and dynamic sketch-id matching so canvas previews keep the intended dimensions after reruns.
 - Added an iframe runtime regression that injects `buildFilterShader()` smoke-test code into Monaco so p5.strands shader builders are validated in-browser without depending on a dedicated demo slide.
 - CI now runs frozen-lockfile install, typecheck, package-content verification, and a demo build smoke step in addition to lint, unit, and E2E tests.
+
+### Docs
+- Refreshed demo and snippet example canvas sizes to match the current sizing behavior and keep the sample output expectations consistent.
 
 ## 1.0.5 - 2026-03-25
 

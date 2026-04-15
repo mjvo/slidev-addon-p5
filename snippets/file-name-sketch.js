@@ -13,7 +13,7 @@ let g;
 let b;
 
 function setup() {
-  createCanvas(300, 300);
+  createCanvas(400, 400);
 
   startX = random(width);
   startY = random(height);

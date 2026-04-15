@@ -6,7 +6,7 @@ export interface IframeResizeHandlerOptions {
   allowedOrigins?: string[];
   onResize: (width: number, height: number, sketchId?: string) => void;
   throttleMs?: number;
-  sketchInstanceId?: string;
+  sketchInstanceId?: string | (() => string | undefined);
   expectedSource?: MessageEventSource | null | (() => MessageEventSource | null);
   requireSketchInstanceId?: boolean;
 }
@@ -20,7 +20,7 @@ export class IframeResizeHandler {
   private pendingResize: { width: number; height: number; sketchId?: string } | null = null;
   private pendingTimeout: number | null = null;
   private listener: (event: MessageEvent) => void;
-  private sketchInstanceId?: string;
+  private sketchInstanceId?: string | (() => string | undefined);
   private expectedSource?: MessageEventSource | null | (() => MessageEventSource | null);
   private requireSketchInstanceId = false;
 
@@ -39,6 +39,13 @@ export class IframeResizeHandler {
       return this.expectedSource();
     }
     return this.expectedSource ?? null;
+  }
+
+  private resolveSketchInstanceId(): string | undefined {
+    if (typeof this.sketchInstanceId === 'function') {
+      return this.sketchInstanceId();
+    }
+    return this.sketchInstanceId;
   }
 
   start() {
@@ -64,7 +71,8 @@ export class IframeResizeHandler {
     const sketchInstanceId = typeof data?.sketchInstanceId === 'string' ? data.sketchInstanceId : undefined;
     if (type !== 'p5-resize' || typeof width !== 'number' || typeof height !== 'number') return;
     if (this.requireSketchInstanceId && !sketchInstanceId) return;
-    if (this.sketchInstanceId && sketchInstanceId !== this.sketchInstanceId) return;
+    const expectedSketchInstanceId = this.resolveSketchInstanceId();
+    if (expectedSketchInstanceId && sketchInstanceId !== expectedSketchInstanceId) return;
     const now = Date.now();
     if (now - this.lastResizeTime >= this.throttleMs) {
       this.onResize(width, height, sketchInstanceId);

@@ -11,6 +11,7 @@ export interface P5IframeLogEntry {
 }
 
 interface ResetIframePresentationOptions {
+  width?: string
   height?: string
   minHeight?: string
   clearMinWidth?: boolean
@@ -39,15 +40,19 @@ export const resetIframePresentation = (
   if (!iframe) return
 
   const {
+    width = '100%',
     height = '400px',
     minHeight = '400px',
     clearMinWidth = false,
   } = options
 
-  iframe.style.setProperty('width', 'auto', 'important')
+  iframe.style.setProperty('width', width, 'important')
   iframe.style.setProperty('height', height, 'important')
   iframe.style.setProperty('min-height', minHeight, 'important')
   iframe.style.setProperty('max-height', 'none', 'important')
+  iframe.style.setProperty('display', 'block', 'important')
+  iframe.style.setProperty('flex', '0 0 auto', 'important')
+  iframe.style.removeProperty('align-self')
   iframe.style.maxWidth = ''
   if (clearMinWidth) {
     iframe.style.minWidth = ''

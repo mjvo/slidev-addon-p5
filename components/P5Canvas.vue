@@ -308,7 +308,7 @@ onMounted(() => {
     // Use the shared IframeResizeHandler for resize messages, passing sketchInstanceId
     resizeHandler = new IframeResizeHandler({
       allowedOrigins: allowedMessageOrigins,
-      sketchInstanceId: sketchInstanceId.value,
+      sketchInstanceId: () => sketchInstanceId.value,
       expectedSource: () => iframeElement.value?.contentWindow ?? null,
       requireSketchInstanceId: true,
       onResize: (width, height, incomingSketchId) => {
@@ -317,10 +317,10 @@ onMounted(() => {
         }
         if (width < 10 || height < 10) return;
         if (iframeElement.value) {
-          iframeElement.value.style.width = width + 'px';
-          iframeElement.value.style.height = height + 'px';
-          iframeElement.value.style.minWidth = width + 'px';
-          iframeElement.value.style.minHeight = height + 'px';
+          iframeElement.value.style.setProperty('width', width + 'px', 'important');
+          iframeElement.value.style.setProperty('height', height + 'px', 'important');
+          iframeElement.value.style.setProperty('min-width', width + 'px', 'important');
+          iframeElement.value.style.setProperty('min-height', height + 'px', 'important');
         }
       },
       throttleMs: 150,

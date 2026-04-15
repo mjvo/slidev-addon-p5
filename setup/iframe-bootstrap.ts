@@ -186,6 +186,55 @@ export interface IframeHtmlOptions {
   requirePositiveCanvasSize?: boolean
 }
 
+export const measureCanvasDisplaySize = (
+  canvas: HTMLCanvasElement,
+  view: Pick<Window, 'devicePixelRatio' | 'getComputedStyle'> = window
+): { width: number; height: number } => {
+  const parseDimension = (value: unknown): number => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value > 0 ? value : 0
+    }
+    if (typeof value !== 'string') {
+      return 0
+    }
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+  }
+
+  const computed = typeof view.getComputedStyle === 'function'
+    ? view.getComputedStyle(canvas)
+    : null
+
+  const rect = typeof canvas.getBoundingClientRect === 'function'
+    ? canvas.getBoundingClientRect()
+    : null
+
+  const pixelRatio = Math.max(1, Number(view.devicePixelRatio) || 1)
+
+  const width = Math.max(
+    parseDimension(canvas.style?.width),
+    parseDimension(computed?.width),
+    parseDimension(rect?.width),
+    parseDimension((canvas as HTMLCanvasElement & { clientWidth?: number }).clientWidth),
+    parseDimension((canvas as HTMLCanvasElement & { offsetWidth?: number }).offsetWidth),
+    parseDimension(canvas.width) / pixelRatio,
+  )
+
+  const height = Math.max(
+    parseDimension(canvas.style?.height),
+    parseDimension(computed?.height),
+    parseDimension(rect?.height),
+    parseDimension((canvas as HTMLCanvasElement & { clientHeight?: number }).clientHeight),
+    parseDimension((canvas as HTMLCanvasElement & { offsetHeight?: number }).offsetHeight),
+    parseDimension(canvas.height) / pixelRatio,
+  )
+
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
+  }
+}
+
 export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
   const {
     computedBg,
@@ -213,6 +262,7 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
   const p5ScriptTag = scriptSources
     .map((url) => `\n      <script src="${url}"></script>`)
     .join('')
+  const measureCanvasDisplaySizeScript = measureCanvasDisplaySize.toString()
   const originalConsoleScript = includeOriginalConsole
     ? `
         window.__p5Addon.originalLog = window.console.log.bind(console);
@@ -302,12 +352,14 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
           }
           return window.location.origin;
         })();
+        const measureCanvasDisplaySize = ${measureCanvasDisplaySizeScript};
 
         const resizeIframe = () => {
           const canvas = document.querySelector('canvas');
           if (canvas) {
-            const width = canvas.offsetWidth + 4;
-            const height = canvas.offsetHeight + 4;
+            const measured = measureCanvasDisplaySize(canvas, window);
+            const width = measured.width + 4;
+            const height = measured.height + 4;
             if (${resizeCondition}) {
               lastWidth = width;
               lastHeight = height;

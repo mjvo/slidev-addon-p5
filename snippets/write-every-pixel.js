@@ -1,5 +1,5 @@
 function setup() {
-  createCanvas(300, 300);
+  createCanvas(400, 400);
   pixelDensity(1);
   noLoop();
 }
