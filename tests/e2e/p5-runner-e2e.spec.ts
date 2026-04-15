@@ -1,7 +1,8 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import {
   clickRunButton,
   navigateToFirstP5CodeSlide,
+  navigateToSlideContainingText,
   waitForP5CanvasInFrame,
   waitForP5IframeReady,
   waitForSlidevDeckReady,
