@@ -792,8 +792,10 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
             }
           }
         };
-        // Set up cleanup when iframe leaves viewport
-        cleanupManager.observeVisibility(iframeElement, performRunCleanup);
+        // Clean up when the owning slide leaves view. Observing the slide
+        // instead of each iframe lets multiple sketches coexist on one slide.
+        const visibilityTarget = iframeElement.closest('.slidev-page') as HTMLElement | null;
+        cleanupManager.observeVisibility(visibilityTarget || iframeElement, performRunCleanup);
         // Also clean up if iframe is removed from DOM
         const mutationParent = (iframeElement.ownerDocument?.body || document.body) as HTMLElement | null;
         cleanupManager.observeMutation(mutationParent, iframeElement, performRunCleanup);

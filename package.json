@@ -44,8 +44,8 @@
     "test:all": "pnpm run test:unit && pnpm run test:e2e"
   },
   "dependencies": {
-    "acorn": "^8.11.0",
-    "acorn-walk": "^8.3.0",
+    "acorn": "^8.16.0",
+    "acorn-walk": "^8.3.5",
     "astring": "^1.8.6"
   },
   "peerDependencies": {

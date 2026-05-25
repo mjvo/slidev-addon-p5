@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { getIframeConsoleMessage, getIframeErrorMessage, pushIframeLog } from '../../setup/iframe-runtime'
+import { describe, expect, it, vi } from 'vitest'
+import { getIframeConsoleMessage, getIframeErrorMessage, handleIframeErrorMessage, pushIframeLog, registerIframeConsoleLogHandler } from '../../setup/iframe-runtime'
 
 describe('iframe-runtime helpers', () => {
   it('normalizes console payloads and preserves sketch ids', () => {
@@ -35,5 +35,64 @@ describe('iframe-runtime helpers', () => {
     expect(logs).toHaveLength(1000)
     expect(logs[0]?.args).toEqual([5])
     expect(logs.at(-1)?.args).toEqual([1004])
+  })
+
+  it('registers iframe console payloads into the shared log list', () => {
+    const logs: Array<{ level?: string; args?: unknown[]; sketchInstanceId?: string; ts?: string }> = []
+    let registeredHandler: ((data: unknown) => void) | null = null
+    const messageHandler = {
+      registerHandler: vi.fn((_type: string, handler: (data: unknown) => void) => {
+        registeredHandler = handler
+      }),
+    }
+
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      registerIframeConsoleLogHandler(messageHandler, logs)
+      registeredHandler?.({ level: 'warn', args: ['from iframe'], sketchInstanceId: 'sketch-2' })
+    } finally {
+      consoleSpy.mockRestore()
+    }
+
+    expect(messageHandler.registerHandler).toHaveBeenCalledWith('p5-console', expect.any(Function))
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toMatchObject({
+      level: 'warn',
+      args: ['from iframe'],
+      sketchInstanceId: 'sketch-2',
+    })
+  })
+
+  it('handles iframe errors only for the active sketch id', () => {
+    const logs: Array<{ level?: string; args?: unknown[]; sketchInstanceId?: string; ts?: string }> = []
+    const setError = vi.fn()
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    try {
+      expect(handleIframeErrorMessage({
+        data: { message: 'stale error', sketchInstanceId: 'old-sketch' },
+        expectedSketchInstanceId: 'active-sketch',
+        logs,
+        setError,
+      })).toBe(false)
+
+      expect(handleIframeErrorMessage({
+        data: { error: 'active error', sketchInstanceId: 'active-sketch' },
+        expectedSketchInstanceId: 'active-sketch',
+        logs,
+        setError,
+      })).toBe(true)
+    } finally {
+      consoleSpy.mockRestore()
+    }
+
+    expect(setError).toHaveBeenCalledTimes(1)
+    expect(setError).toHaveBeenCalledWith('active error')
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toMatchObject({
+      level: 'error',
+      args: ['active error'],
+      sketchInstanceId: 'active-sketch',
+    })
   })
 })

@@ -1,5 +1,5 @@
 import { SECURITY_CONFIG } from './config'
-import { buildP5IframeHtml, computeIframeBackgroundTheme, type IframeBackgroundOptions } from './iframe-bootstrap'
+import { applyThemeToIframeDocument, buildP5IframeHtml, computeIframeBackgroundTheme, type ApplyIframeThemeOptions, type IframeBackgroundOptions } from './iframe-bootstrap'
 import { resetIframeToBaseHtml } from './p5-utils'
 import { getP5ScriptUrls, type P5VersionConfig } from './p5-version-manager'
 
@@ -27,10 +27,82 @@ interface ResetP5IframeOptions extends P5VersionConfig, IframeBackgroundOptions 
   requirePositiveCanvasSize?: boolean
 }
 
+interface IframeThemeSyncOptions extends IframeBackgroundOptions, ApplyIframeThemeOptions {
+  getWindow: () => Window | null | undefined
+}
+
+interface IframeMessageHandlerLike {
+  registerHandler: (type: string, handler: (data: unknown) => void) => void
+}
+
+interface IframeErrorHandlerOptions {
+  data: unknown
+  expectedSketchInstanceId?: string
+  logs: P5IframeLogEntry[]
+  setError: (message: string) => void
+  logPrefix?: string
+}
+
 const MAX_IFRAME_LOGS = 1000
 
 export const getAllowedMessageOrigins = (): string[] => {
   return Array.from(new Set([window.location.origin, ...SECURITY_CONFIG.allowedOrigins]))
+}
+
+export const createIframeThemeSyncController = (options: IframeThemeSyncOptions) => {
+  let themeObserver: MutationObserver | null = null
+  let themeSyncFrame: number | null = null
+
+  const sync = (): void => {
+    const iframeWindow = options.getWindow()
+    if (!iframeWindow) return
+
+    const { computedBg, theme } = computeIframeBackgroundTheme({
+      preferredElementId: options.preferredElementId,
+      preferredSelector: options.preferredSelector,
+    })
+    applyThemeToIframeDocument(iframeWindow.document, computedBg, theme, {
+      includeBodyTextColor: options.includeBodyTextColor,
+    })
+  }
+
+  const schedule = (): void => {
+    if (themeSyncFrame !== null) {
+      cancelAnimationFrame(themeSyncFrame)
+    }
+    themeSyncFrame = window.requestAnimationFrame(() => {
+      themeSyncFrame = null
+      sync()
+    })
+  }
+
+  const start = (): void => {
+    if (themeObserver) return
+    themeObserver = new MutationObserver(() => {
+      schedule()
+    })
+    const observerOptions = {
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-theme'],
+    }
+    themeObserver.observe(document.documentElement, observerOptions)
+    if (document.body) {
+      themeObserver.observe(document.body, observerOptions)
+    }
+  }
+
+  const stop = (): void => {
+    if (themeObserver) {
+      themeObserver.disconnect()
+      themeObserver = null
+    }
+    if (themeSyncFrame !== null) {
+      cancelAnimationFrame(themeSyncFrame)
+      themeSyncFrame = null
+    }
+  }
+
+  return { schedule, start, stop, sync }
 }
 
 export const resetIframePresentation = (
@@ -98,6 +170,48 @@ export const getIframeErrorMessage = (
     message: String(rawMessage),
     sketchInstanceId: typeof payload?.sketchInstanceId === 'string' ? payload.sketchInstanceId : undefined,
   }
+}
+
+export const registerIframeConsoleLogHandler = (
+  messageHandler: IframeMessageHandlerLike | null | undefined,
+  logs: P5IframeLogEntry[]
+): void => {
+  if (!messageHandler) return
+  messageHandler.registerHandler('p5-console', (data: unknown) => {
+    try {
+      const { level, args, sketchInstanceId } = getIframeConsoleMessage(data)
+      // eslint-disable-next-line no-console
+      console[level] ? console[level]('[iframe p5]', ...args) : console.log('[iframe p5]', ...args)
+      pushIframeLog(logs, { level, args, sketchInstanceId })
+    } catch (e) {
+      // Ignore malformed iframe log payloads from stale runtimes.
+    }
+  })
+}
+
+export const handleIframeErrorMessage = ({
+  data,
+  expectedSketchInstanceId,
+  logs,
+  setError,
+  logPrefix = '[p5 addon] Error in iframe:',
+}: IframeErrorHandlerOptions): boolean => {
+  try {
+    const details = getIframeErrorMessage(data)
+    if (details.sketchInstanceId && details.sketchInstanceId !== expectedSketchInstanceId) {
+      return false
+    }
+    setError(details.message)
+    pushIframeLog(logs, { level: 'error', args: [details.message], sketchInstanceId: details.sketchInstanceId })
+  } catch (e) {
+    const fallbackMessage = String(data)
+    setError(fallbackMessage)
+    pushIframeLog(logs, { level: 'error', args: [fallbackMessage], sketchInstanceId: expectedSketchInstanceId })
+  }
+
+  // eslint-disable-next-line no-console
+  console.error(logPrefix, data)
+  return true
 }
 
 export const resetP5Iframe = async (options: ResetP5IframeOptions): Promise<Window | null> => {

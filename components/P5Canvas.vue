@@ -25,7 +25,6 @@ import type { CSSProperties } from 'vue'
 import { createSketchId } from '../setup/id'
 import { transpileGlobalToInstance } from '../setup/p5-transpile'
 import { instrumentLoops } from '../setup/loop-guard'
-import { applyThemeToIframeDocument, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG, TIMING_CONFIG } from '../setup/config'
 import { safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
 import { getShaderDslBridgeScript } from '../setup/p5-shader-dsl'
@@ -34,7 +33,7 @@ import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import P5ErrorBoundary from './P5ErrorBoundary.vue'
 import P5LogPanel from './P5LogPanel.vue'
-import { getAllowedMessageOrigins, getIframeConsoleMessage, getIframeErrorMessage, pushIframeLog, resetIframePresentation, resetP5Iframe, type P5IframeLogEntry } from '../setup/iframe-runtime'
+import { createIframeThemeSyncController, getAllowedMessageOrigins, handleIframeErrorMessage, registerIframeConsoleLogHandler, resetIframePresentation, resetP5Iframe, type P5IframeLogEntry } from '../setup/iframe-runtime'
 
 import { useSlots, onUpdated } from 'vue'
 const props = withDefaults(defineProps<{
@@ -63,11 +62,13 @@ const iframeAllow = SECURITY_CONFIG.iframeAllow
 let resizeHandler: IframeResizeHandler | null = null
 let messageHandler: IframeMessageHandler | null = null
 let messageHandlerFn: ((event: MessageEvent) => void) | null = null
-let themeObserver: MutationObserver | null = null
-let themeSyncFrame: number | null = null
 const iframeLogs = ref<P5IframeLogEntry[]>([])
 const sketchInstanceId = ref<string>(createSketchId())
 const allowedMessageOrigins = getAllowedMessageOrigins()
+const themeSync = createIframeThemeSyncController({
+  getWindow: () => iframeWindow.value,
+  preferredElementId: 'slide-content',
+})
 
 const wrapperStyle = computed(() => ({
   display: 'flex',
@@ -95,49 +96,6 @@ async function initializeIframe() {
     requirePositiveCanvasSize: true,
     includeThemeOnAddon: true,
   })
-}
-
-function syncIframeTheme() {
-  if (!iframeWindow.value) return
-  const iframeDoc = iframeWindow.value.document
-  const { computedBg, theme } = computeIframeBackgroundTheme({ preferredElementId: 'slide-content' })
-  applyThemeToIframeDocument(iframeDoc, computedBg, theme)
-}
-
-function scheduleIframeThemeSync() {
-  if (themeSyncFrame !== null) {
-    cancelAnimationFrame(themeSyncFrame)
-  }
-  themeSyncFrame = window.requestAnimationFrame(() => {
-    themeSyncFrame = null
-    syncIframeTheme()
-  })
-}
-
-function startThemeObserver() {
-  if (themeObserver) return
-  themeObserver = new MutationObserver(() => {
-    scheduleIframeThemeSync()
-  })
-  const observerOptions = {
-    attributes: true,
-    attributeFilter: ['class', 'style', 'data-theme'],
-  }
-  themeObserver.observe(document.documentElement, observerOptions)
-  if (document.body) {
-    themeObserver.observe(document.body, observerOptions)
-  }
-}
-
-function stopThemeObserver() {
-  if (themeObserver) {
-    themeObserver.disconnect()
-    themeObserver = null
-  }
-  if (themeSyncFrame !== null) {
-    cancelAnimationFrame(themeSyncFrame)
-    themeSyncFrame = null
-  }
 }
 
 // Message routing will be handled by `IframeMessageHandler` instance registered below.
@@ -303,8 +261,8 @@ async function runP5Sketch() {
 onMounted(() => {
   nextTick(() => {
     slotCode.value = extractCodeFromSlot()
-    startThemeObserver()
-    scheduleIframeThemeSync()
+    themeSync.start()
+    themeSync.schedule()
     // Use the shared IframeResizeHandler for resize messages, passing sketchInstanceId
     resizeHandler = new IframeResizeHandler({
       allowedOrigins: allowedMessageOrigins,
@@ -334,37 +292,18 @@ onMounted(() => {
         requireSketchInstanceId: true,
         expectedSketchInstanceId: () => sketchInstanceId.value,
         onError: (data) => {
-          try {
-            const details = getIframeErrorMessage(data)
-            if (details.sketchInstanceId && details.sketchInstanceId !== sketchInstanceId.value) return
-            errorMessage.value = details.message
-            // eslint-disable-next-line no-console
-            console.error('[iframe p5 error]', details.message)
-            pushIframeLog(iframeLogs.value, { level: 'error', args: [details.message], sketchInstanceId: details.sketchInstanceId })
-          } catch (e) {
-            errorMessage.value = String(data)
-            // eslint-disable-next-line no-console
-            console.error('[iframe p5 error]', data)
-            pushIframeLog(iframeLogs.value, { level: 'error', args: [String(data)], sketchInstanceId: sketchInstanceId.value })
-          }
+          handleIframeErrorMessage({
+            data,
+            expectedSketchInstanceId: sketchInstanceId.value,
+            logs: iframeLogs.value,
+            setError: (message) => { errorMessage.value = message },
+            logPrefix: '[iframe p5 error]',
+          })
         },
         onReady: () => {},
         onResize: () => {},
       })
-      // Also surface console messages from the iframe to the parent console
-      try {
-        messageHandler.registerHandler('p5-console', (data: unknown) => {
-          try {
-            const { level, args, sketchInstanceId } = getIframeConsoleMessage(data)
-            // Prefix logs so it's clear they came from the iframe
-            // eslint-disable-next-line no-console
-            console[level] ? console[level]('[iframe p5]', ...args) : console.log('[iframe p5]', ...args)
-            pushIframeLog(iframeLogs.value, { level, args, sketchInstanceId })
-          } catch (e) {
-            // ignore
-          }
-        })
-      } catch (e) { /* ignore */ }
+      registerIframeConsoleLogHandler(messageHandler, iframeLogs.value)
       messageHandlerFn = (event: MessageEvent) => { try { messageHandler?.handle(event) } catch (e) { /* ignore */ } }
       window.addEventListener('message', messageHandlerFn)
     } catch (e) {
@@ -388,7 +327,7 @@ onBeforeUnmount(() => {
       void 0
     }
   }
-  stopThemeObserver()
+  themeSync.stop()
   if (resizeHandler) resizeHandler.stop()
   if (messageHandlerFn) {
     window.removeEventListener('message', messageHandlerFn)

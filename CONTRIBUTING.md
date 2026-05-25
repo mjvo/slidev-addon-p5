@@ -75,5 +75,5 @@ Common issues & tips
 - When adding new E2E tests, prefer using the existing helpers (`clickRunButton`, `waitForP5CanvasInFrame`) to reduce flakiness.
 
 CI notes
-- The repository includes a GitHub Actions workflow at `.github/workflows/ci.yml` that runs lint, unit tests, and Playwright E2E on pushes and PRs.
+- The repository includes a GitHub Actions workflow at `.github/workflows/ci.yml` that runs lint, typecheck, unit tests, Playwright E2E, package-content verification, and a demo build smoke check on pushes and PRs.
 - On failure, the workflow uploads Playwright artifacts found under `test-results/` to the run as an artifact for offline inspection.

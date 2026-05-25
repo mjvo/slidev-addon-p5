@@ -178,6 +178,7 @@ function setup() { createCanvas(300, 300); }
 - Non-p5 code is delegated to Slidev's JS runner when available. If unavailable, the addon returns an error instead of executing code locally.
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
 - Iframe runtime errors are surfaced in the inline error boundary and also recorded in the iframe logs panel.
+- After running a `<P5Code>` sketch, the iframe canvas is focused so keyboard-driven sketches can receive input immediately.
 - Iframe preview background follows Slidev theme toggles live (including `d` dark/light switch during slideshow).
 - Extra scripts are loaded only inside the sketch iframe, not the parent Slidev document. Exported decks still fetch those script URLs at runtime, so prefer local `public/` assets or other trusted, stable sources.
 - `filterColor.texCoord` must be read inside the `filterColor.begin() ... end()` hook scope.
@@ -228,6 +229,7 @@ function draw() {
 }
 ```
 </P5Canvas>
+
 ## Contributing (developers)
 
 Short workflow:

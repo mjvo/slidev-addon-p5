@@ -2,6 +2,7 @@
   <div
     class="p5-canvas-wrapper"
     :style="wrapperStyle"
+    :data-p5code-id="sketchInstanceId"
   >
     <!-- Monaco editor slot (left side or top) -->
     <div
@@ -44,11 +45,10 @@ import type { CSSProperties } from 'vue'
 import { IframeMessageHandler } from '../setup/iframe-message-handler'
 import { IframeResizeHandler } from '../setup/iframe-resize-handler'
 import { safeRemoveP5, stopP5SoundPlayback } from '../setup/p5-utils'
-import { applyThemeToIframeDocument, computeIframeBackgroundTheme } from '../setup/iframe-bootstrap'
 import { SECURITY_CONFIG, TIMING_CONFIG } from '../setup/config'
 import { instrumentLoops } from '../setup/loop-guard'
 import { nextTick } from 'vue'
-import { getAllowedMessageOrigins, getIframeConsoleMessage, getIframeErrorMessage, pushIframeLog, resetIframePresentation, resetP5Iframe, type P5IframeLogEntry } from '../setup/iframe-runtime'
+import { createIframeThemeSyncController, getAllowedMessageOrigins, handleIframeErrorMessage, registerIframeConsoleLogHandler, resetIframePresentation, resetP5Iframe, type P5IframeLogEntry } from '../setup/iframe-runtime'
 
 interface Props {
   displayOnly?: boolean
@@ -90,8 +90,11 @@ interface SlidevGlobalLike {
 // Monaco code-runner registration
 let unregisterMonacoRunner: (() => void) | null = null
 let monacoRegisterRetryTimer: ReturnType<typeof setInterval> | null = null
-let themeObserver: MutationObserver | null = null
-let themeSyncFrame: number | null = null
+const themeSync = createIframeThemeSyncController({
+  getWindow: () => iframeWindow.value,
+  preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
+  includeBodyTextColor: true,
+})
 
 const registerMonacoRunner = (): boolean => {
   if (unregisterMonacoRunner) return true
@@ -167,64 +170,11 @@ const initializeIframe = async () => {
   })
 }
 
-const syncIframeTheme = () => {
-  if (!iframeWindow.value) return
-  const iframeDoc = iframeWindow.value.document
-  const { computedBg, theme } = computeIframeBackgroundTheme({
-    preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
-  })
-  applyThemeToIframeDocument(iframeDoc, computedBg, theme, { includeBodyTextColor: true })
-}
-
-const scheduleIframeThemeSync = () => {
-  if (themeSyncFrame !== null) {
-    cancelAnimationFrame(themeSyncFrame)
-  }
-  themeSyncFrame = window.requestAnimationFrame(() => {
-    themeSyncFrame = null
-    syncIframeTheme()
-  })
-}
-
-const startThemeObserver = () => {
-  if (themeObserver) return
-  themeObserver = new MutationObserver(() => {
-    scheduleIframeThemeSync()
-  })
-  const observerOptions = {
-    attributes: true,
-    attributeFilter: ['class', 'style', 'data-theme'],
-  }
-  themeObserver.observe(document.documentElement, observerOptions)
-  if (document.body) {
-    themeObserver.observe(document.body, observerOptions)
-  }
-}
-
-const stopThemeObserver = () => {
-  if (themeObserver) {
-    themeObserver.disconnect()
-    themeObserver = null
-  }
-  if (themeSyncFrame !== null) {
-    cancelAnimationFrame(themeSyncFrame)
-    themeSyncFrame = null
-  }
-}
-
 // Register message handlers to collect logs/errors for UI panel
 const registerLogHandlers = () => {
   try {
     if (!messageHandler.value) return
-    messageHandler.value.registerHandler('p5-console', (data: unknown) => {
-      try {
-        const { level, args, sketchInstanceId } = getIframeConsoleMessage(data)
-        // also mirror to parent console
-        // eslint-disable-next-line no-console
-        console[level] ? console[level]('[iframe p5]', ...args) : console.log('[iframe p5]', ...args)
-        pushIframeLog(iframeLogs.value, { level, args, sketchInstanceId })
-      } catch (e) { /* ignore */ }
-    })
+    registerIframeConsoleLogHandler(messageHandler.value, iframeLogs.value)
   } catch (e) { /* ignore */ }
 }
 
@@ -254,7 +204,7 @@ const executeInIframe = async (code: string) => {
     preferredSelector: '.slidev-page, .slidev-page-main, .slidev-page-content',
   })
   if (!iframeWindow.value) return { error: 'Iframe not ready after reset' }
-  scheduleIframeThemeSync()
+  themeSync.schedule()
 
   try {
     // Inject code via blob URL instead of eval
@@ -341,8 +291,8 @@ onMounted(() => {
     const msg = (error as { message?: unknown } | null)?.message
     errorMessage.value = typeof msg === 'string' ? msg : String(error)
   })
-  startThemeObserver()
-  scheduleIframeThemeSync()
+  themeSync.start()
+  themeSync.schedule()
 
   // Use the shared IframeResizeHandler for resize messages, passing sketchInstanceId
   resizeHandler = new IframeResizeHandler({
@@ -373,17 +323,12 @@ onMounted(() => {
     onReady: () => {},
     onResize: () => {}, // Handled by resizeHandler
     onError: (data: unknown) => {
-      try {
-        const details = getIframeErrorMessage(data)
-        // Only surface errors intended for this sketch instance
-        if (details.sketchInstanceId && details.sketchInstanceId !== sketchInstanceId.value) return
-        errorMessage.value = details.message
-        pushIframeLog(iframeLogs.value, { level: 'error', args: [details.message], sketchInstanceId: details.sketchInstanceId })
-      } catch (e) {
-        errorMessage.value = String(data)
-        pushIframeLog(iframeLogs.value, { level: 'error', args: [String(data)], sketchInstanceId: sketchInstanceId.value })
-      }
-      console.error('[p5 addon] Error in iframe:', data)
+      handleIframeErrorMessage({
+        data,
+        expectedSketchInstanceId: sketchInstanceId.value,
+        logs: iframeLogs.value,
+        setError: (message) => { errorMessage.value = message },
+      })
     },
     onExecutionComplete: () => {
       // Code execution completed
@@ -435,7 +380,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   errorMessage.value = null
   cleanupP5()
-  stopThemeObserver()
+  themeSync.stop()
   if (resizeHandler) resizeHandler.stop()
   if (messageHandlerFn.value) {
     // Remove with the same function reference that was added

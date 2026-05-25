@@ -10,6 +10,7 @@ Test layout
   - `tests/unit/code-runners.spec.ts` also verifies that non-p5 JavaScript still delegates to Slidev's original Monaco runner after addon setup.
   - `tests/e2e/p5-runner-e2e.spec.ts` includes delayed-iframe-p5-load first-run coverage.
   - `tests/e2e/p5-runner-e2e.spec.ts` also includes a compatibility check asserting that a plain Monaco JavaScript block still prints to Slidev's standard runner output with the addon installed.
+  - `tests/e2e/p5-runner-e2e.spec.ts` covers iframe keyboard focus, theme background sync, and routing when two `<P5Code>` sketches share one slide.
   - `tests/e2e/error-ui.spec.ts` validates iframe `p5-error` messages surface in UI.
 
 NPM scripts
@@ -58,4 +59,4 @@ Debugging tips
 - Use the helper commands in tests like `waitForP5IframeReady` (tests include a `p5-iframe-ready` postMessage handshake) to wait for iframe initialization in your debugging flow.
 
 CI
-- CI should run `pnpm run test:all`. Ensure Playwright browsers are installed in CI using `pnpm exec playwright install --with-deps` or the platform-specific installer used by your CI environment.
+- CI should run frozen-lockfile install, lint, typecheck, unit tests, Playwright E2E, package-content verification, and demo build smoke coverage. Ensure Playwright browsers are installed in CI using `pnpm exec playwright install --with-deps` or the platform-specific installer used by your CI environment.

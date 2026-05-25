@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Fixed
+- Kept multiple `<P5Code>` sketches on the same slide from clearing each other during Run cleanup by observing slide visibility instead of individual iframe visibility.
+
+### Changed
+- Consolidated shared iframe theme syncing, console log capture, and error-message handling helpers used by `P5Canvas` and `P5Code`.
+
+### Tests
+- Added E2E regression coverage for iframe canvas focus after Run, live theme background syncing, and multiple `<P5Code>` sketches sharing one slide.
+- Added unit coverage for the shared iframe console/error helpers.
+
+### Docs
+- Clarified keyboard focus behavior and refreshed testing/CI notes to match the current validation workflow.
+
 ## 1.0.7 - 2026-04-15
 
 ### Fixed
