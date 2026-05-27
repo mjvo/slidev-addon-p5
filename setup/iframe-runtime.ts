@@ -253,5 +253,14 @@ export const resetP5Iframe = async (options: ResetP5IframeOptions): Promise<Wind
   })
 
   await resetIframeToBaseHtml(iframe)
-  return iframe.contentWindow
+  const iframeWindow = iframe.contentWindow as (Window & {
+    __p5Addon?: { dependencyErrors?: unknown[] }
+  }) | null
+  const dependencyError = iframeWindow?.__p5Addon?.dependencyErrors?.find(
+    (message): message is string => typeof message === 'string'
+  )
+  if (dependencyError) {
+    throw new Error(dependencyError)
+  }
+  return iframeWindow
 }

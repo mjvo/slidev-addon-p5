@@ -110,6 +110,19 @@ function setup() {
 
 ---
 
+## E2E missing external-p5-lib diagnostic
+
+<P5Canvas :external-p5-libs="['http://127.0.0.1:9/missing-external-p5-lib.js']">
+\`\`\`js
+function setup() {
+  createCanvas(180, 100);
+  noLoop();
+}
+\`\`\`
+</P5Canvas>
+
+---
+
 ## E2E multi sketch routing smoke
 
 <P5Code>

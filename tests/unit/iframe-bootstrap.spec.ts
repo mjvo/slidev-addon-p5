@@ -23,6 +23,24 @@ describe('iframe-bootstrap', () => {
     expect(thirdIndex).toBeGreaterThan(secondIndex)
   })
 
+  it('installs dependency load error reporting before external scripts execute', () => {
+    const html = buildP5IframeHtml({
+      computedBg: 'rgba(255, 255, 255, 1)',
+      theme: 'light',
+      sketchInstanceId: 'error-sketch',
+      scriptUrls: ['/missing-library.js'],
+    })
+
+    const reporterIndex = html.indexOf('Failed to load iframe dependency script:')
+    const scriptIndex = html.indexOf('<script src="/missing-library.js"></script>')
+
+    expect(reporterIndex).toBeGreaterThan(-1)
+    expect(reporterIndex).toBeLessThan(scriptIndex)
+    expect(html).toContain(`window.__p5Addon.sketchInstanceId = "error-sketch";`)
+    expect(html).toContain('window.__p5Addon.dependencyErrors.push(message);')
+    expect(html).toContain(`type: 'p5-error'`)
+  })
+
   it('prefers intended display size over a shrunken offsetWidth measurement', () => {
     const canvas = {
       style: {

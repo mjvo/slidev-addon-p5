@@ -182,6 +182,7 @@ function setup() { createCanvas(300, 300); }
 - Non-p5 code is delegated to Slidev's JS runner when available. If unavailable, the addon returns an error instead of executing code locally.
 - Iframe messages are validated by origin and source window, and are scoped by `sketchInstanceId`.
 - Iframe runtime errors are surfaced in the inline error boundary and also recorded in the iframe logs panel.
+- Failed p5, p5.sound, and `externalP5Libs` script requests surface the failing URL in the inline iframe error UI.
 - After running a `<P5Code>` sketch, the iframe canvas is focused so keyboard-driven sketches can receive input immediately.
 - Iframe preview background follows Slidev theme toggles live (including `d` dark/light switch during slideshow).
 - Extra scripts are loaded only inside the sketch iframe, not the parent Slidev document. Exported decks still fetch those script URLs at runtime, so prefer local `public/` assets or other trusted, stable sources.
@@ -197,6 +198,9 @@ The iframe `Logs` panel is reserved for iframe runtime errors and stays hidden u
 
 Common iframe errors and what to do:
 
+- `Failed to load iframe dependency script: ...`
+  - Meaning: p5, p5.sound, or an `externalP5Libs` URL could not be loaded in the sketch iframe.
+  - Action: check the URL, network availability, and whether the exported deck can access that dependency.
 - `ReferenceError: VIDEO is not defined`
   - Meaning: an older addon/runtime build is still being served and media constants were not transpiled to instance mode.
   - Action: restart Slidev, hard-refresh the browser, and make sure you are on a build that includes the `VIDEO`/`AUDIO` transpilation fix.

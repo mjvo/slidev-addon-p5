@@ -79,6 +79,7 @@ Handler behavior:
 - requires and/or pins `sketchInstanceId` where configured,
 - routes by message type,
 - surfaces `p5-error` messages through component `onError` handlers (error boundary + logs),
+- reports dependency `<script>` load failures with the failing iframe URL through `p5-error`,
 - throttles resize updates,
 - ignores stale sketch IDs where applicable.
 
@@ -126,6 +127,7 @@ Extra script loading:
 2. accepted URLs are loaded only inside the sketch iframe
 3. load order is: p5 core, optional p5.sound, then `externalP5Libs` in author-provided order
 4. accepted URL forms are `https://...`, `http://localhost...`, `http://127.0.0.1...`, and relative/root-relative URLs
+5. dependency request failures are reported in the owning component's inline error UI with the failing URL
 
 ## Testing and CI
 
@@ -136,12 +138,12 @@ Extra script loading:
 ## Current Constraints
 
 - p5 detection is heuristic (AST signal-based), not a full semantic classifier.
-- Extremely slow or blocked CDN/library loads can still exceed the runner's readiness wait window.
+- Extremely slow CDN/library loads can still exceed the runner's readiness wait window.
 - Loop guard protects `while`/`for` loop statements, but cannot guarantee termination for recursion or non-loop blocking patterns.
 - Exported decks still fetch any configured extra iframe scripts at runtime, so remote script mutability remains part of the trust model.
 
 ## Practical Extension Points
 
 - Improve detection precision for advanced/dynamic patterns without increasing false positives.
-- Expand tests for extreme readiness delays and sketch ID pairing under rapid reruns.
+- Expand tests for extreme readiness delays and additional advanced sketch ID pairing scenarios.
 - Add additional documented examples for custom p5 source loading patterns.

@@ -262,6 +262,35 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
   const p5ScriptTag = scriptSources
     .map((url) => `\n      <script src="${url}"></script>`)
     .join('')
+  const dependencyErrorBootstrapScript = `
+      <script>
+        (function () {
+          window.__p5Addon = window.__p5Addon || {};
+          window.__p5Addon.logs = window.__p5Addon.logs || [];
+          window.__p5Addon.dependencyErrors = window.__p5Addon.dependencyErrors || [];
+          window.__p5Addon.sketchInstanceId = ${JSON.stringify(sketchInstanceId)};
+          window.__p5Addon.parentOrigin = (function () {
+            try {
+              if (document.referrer) return new URL(document.referrer).origin;
+              if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) return window.location.ancestorOrigins[0];
+            } catch (e) {
+              // ignore and fallback
+            }
+            return window.location.origin;
+          })();
+          window.addEventListener('error', function (event) {
+            var target = event && event.target;
+            if (!target || target.tagName !== 'SCRIPT' || !target.src) return;
+            var message = 'Failed to load iframe dependency script: ' + target.src;
+            window.__p5Addon.dependencyErrors.push(message);
+            window.parent.postMessage({
+              type: 'p5-error',
+              error: message,
+              sketchInstanceId: window.__p5Addon.sketchInstanceId
+            }, window.__p5Addon.parentOrigin);
+          }, true);
+        })();
+      </script>`
   const measureCanvasDisplaySizeScript = measureCanvasDisplaySize.toString()
   const originalConsoleScript = includeOriginalConsole
     ? `
@@ -313,7 +342,7 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
     <html>
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">${p5ScriptTag}
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">${dependencyErrorBootstrapScript}${p5ScriptTag}
       <style>
         html, body {
           margin: 0;
@@ -337,21 +366,13 @@ export const buildP5IframeHtml = (options: IframeHtmlOptions): string => {
     <body>
       <div id="p5-container"></div>
       <script>
-        window.__p5Addon = {};
-        window.__p5Addon.logs = [];${originalConsoleScript}
+        window.__p5Addon = window.__p5Addon || {};
+        window.__p5Addon.logs = window.__p5Addon.logs || [];${originalConsoleScript}
         window.__p5Addon.sketchInstanceId = '${sketchInstanceId}';${themeScript}
 
         let lastWidth = 0;
         let lastHeight = 0;
-        const parentOrigin = (function(){
-          try {
-            if (document.referrer) return new URL(document.referrer).origin;
-            if (window.location.ancestorOrigins && window.location.ancestorOrigins.length) return window.location.ancestorOrigins[0];
-          } catch (e) {
-            // ignore and fallback
-          }
-          return window.location.origin;
-        })();
+        const parentOrigin = window.__p5Addon.parentOrigin;
         const measureCanvasDisplaySize = ${measureCanvasDisplaySizeScript};
 
         const resizeIframe = () => {

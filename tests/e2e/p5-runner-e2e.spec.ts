@@ -330,7 +330,7 @@ test('P5Canvas iframe theme follows parent background changes', async ({ page })
   }, { timeout: 10_000 }).toBe('rgb(12, 34, 56)')
 })
 
-test('Run buttons route to the correct iframe when two P5Code sketches share a slide', async ({ page }) => {
+test('Run buttons keep routing to the correct iframe through rapid multi-sketch reruns', async ({ page }) => {
   await page.goto('/')
   await waitForSlidevDeckReady(page)
   await navigateToSlideContainingText(page, 'E2E multi sketch routing smoke')
@@ -385,4 +385,26 @@ test('Run buttons route to the correct iframe when two P5Code sketches share a s
   await expect.poll(async () => {
     return secondFrame!.evaluate(() => document.querySelector('canvas')?.getAttribute('width'))
   }, { timeout: 10_000 }).toBe('210')
+
+  await activeSlide.evaluate((slide) => {
+    const buttons = Array.from(slide.querySelectorAll('button[title="Run code"]')) as HTMLButtonElement[]
+    for (const index of [1, 0, 1, 0]) {
+      buttons[index].focus()
+      buttons[index].click()
+    }
+  })
+
+  await expect.poll(async () => {
+    return firstFrame!.evaluate(() => document.querySelector('canvas')?.getAttribute('width'))
+  }, { timeout: 20_000 }).toBe('160')
+  await expect.poll(async () => {
+    return secondFrame!.evaluate(() => document.querySelector('canvas')?.getAttribute('width'))
+  }, { timeout: 20_000 }).toBe('210')
+  await expect.poll(async () => {
+    return firstFrame!.evaluate(() => document.querySelectorAll('canvas').length)
+  }, { timeout: 20_000 }).toBe(1)
+  await expect.poll(async () => {
+    return secondFrame!.evaluate(() => document.querySelectorAll('canvas').length)
+  }, { timeout: 20_000 }).toBe(1)
+  await expect(activeSlide.locator('.p5-error-boundary .message')).toHaveCount(0)
 })

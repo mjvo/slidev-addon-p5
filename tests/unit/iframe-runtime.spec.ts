@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
-import { getIframeConsoleMessage, getIframeErrorMessage, handleIframeErrorMessage, pushIframeLog, registerIframeConsoleLogHandler } from '../../setup/iframe-runtime'
+import { getIframeConsoleMessage, getIframeErrorMessage, handleIframeErrorMessage, pushIframeLog, registerIframeConsoleLogHandler, resetP5Iframe } from '../../setup/iframe-runtime'
 
 describe('iframe-runtime helpers', () => {
   it('normalizes console payloads and preserves sketch ids', () => {
@@ -94,5 +95,23 @@ describe('iframe-runtime helpers', () => {
       args: ['active error'],
       sketchInstanceId: 'active-sketch',
     })
+  })
+
+  it('rejects iframe setup when a dependency script recorded a load failure', async () => {
+    const iframe = document.createElement('iframe') as HTMLIFrameElement & { __baseHtml?: string }
+    Object.defineProperty(iframe, 'contentWindow', {
+      configurable: true,
+      value: {
+        __p5Addon: {
+          dependencyErrors: ['Failed to load iframe dependency script: https://example.test/missing.js'],
+        },
+      },
+    })
+    window.setTimeout(() => iframe.dispatchEvent(new Event('load')), 0)
+
+    await expect(resetP5Iframe({
+      iframe,
+      sketchInstanceId: 'dependency-error',
+    })).rejects.toThrow('Failed to load iframe dependency script: https://example.test/missing.js')
   })
 })

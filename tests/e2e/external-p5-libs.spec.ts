@@ -53,3 +53,21 @@ test('external-p5-libs loads a local iframe helper library', async ({ page }) =>
   })
   expect(helperVersion).toBe('smoke-1')
 })
+
+test('failed external-p5-libs loads surface the failed iframe dependency URL', async ({ page }) => {
+  await page.goto('/')
+  await waitForSlidevDeckReady(page)
+  await navigateToSlideContainingText(page, 'E2E missing external-p5-lib diagnostic')
+
+  const activeSlide = page.locator(".slidev-page:not([style*='display: none'])").filter({
+    hasText: 'E2E missing external-p5-lib diagnostic',
+  }).first()
+  await expect(activeSlide).toBeVisible({ timeout: 10_000 })
+  await expect(activeSlide.locator('.p5-error-boundary .message')).toContainText(
+    'Failed to load iframe dependency script:',
+    { timeout: 20_000 },
+  )
+  await expect(activeSlide.locator('.p5-error-boundary .message')).toContainText(
+    '127.0.0.1:9/missing-external-p5-lib.js',
+  )
+})
