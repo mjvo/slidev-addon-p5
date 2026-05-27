@@ -2,20 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 1.0.8 - 2026-05-27
 
 ### Fixed
 - Kept multiple `<P5Code>` sketches on the same slide from clearing each other during Run cleanup by observing slide visibility instead of individual iframe visibility.
+- Routed Monaco Run actions by `sketchInstanceId` first, with bounded fallbacks, so active sketches reliably target the correct iframe when focus state is unreliable or multiple sketches share a slide.
+- Expanded iframe theme sync observation to slide-level containers so live parent background updates continue to propagate to embedded sketches.
+- Restored the validated lockfile graph after a broad transitive refresh selected `fuse.js@7.3.0`, which caused Slidev's collapsed `Goto...` dialog to render its full results list.
 
 ### Changed
 - Consolidated shared iframe theme syncing, console log capture, and error-message handling helpers used by `P5Canvas` and `P5Code`.
+- Kept the focused `acorn` and `acorn-walk` parser dependency updates while avoiding unrelated Slidev toolchain churn.
 
 ### Tests
 - Added E2E regression coverage for iframe canvas focus after Run, live theme background syncing, and multiple `<P5Code>` sketches sharing one slide.
 - Added unit coverage for the shared iframe console/error helpers.
+- Stabilized E2E navigation, Run-button targeting, and iframe readiness waits around active-slide and sketch-instance ownership.
 
 ### Docs
 - Clarified keyboard focus behavior and refreshed testing/CI notes to match the current validation workflow.
+- Documented frozen-lockfile installs and review expectations for narrowly scoped dependency updates.
 
 ## 1.0.7 - 2026-04-15
 

@@ -173,7 +173,10 @@ test('Run delegates plain JavaScript to Slidev default output', async ({ page })
 
   const runButton = activeSlide.locator('button[title="Run code"]').first()
   await expect(runButton).toBeVisible({ timeout: 10_000 })
-  await runButton.click()
+  await runButton.focus()
+  await runButton.evaluate((button) => {
+    (button as HTMLButtonElement).click()
+  })
 
   await expect(activeSlide.locator('.slidev-runner-output')).toContainText('plain-js-ok', { timeout: 20_000 })
   await expect(activeSlide.locator('.text-red-500')).toHaveCount(0)
@@ -267,7 +270,10 @@ test('Run focuses the iframe canvas for keyboard sketches', async ({ page }) => 
 
   const runButton = activeSlide.locator('button[title="Run code"]').first()
   await expect(runButton).toBeVisible({ timeout: 10_000 })
-  await runButton.click()
+  await runButton.focus()
+  await runButton.evaluate((button) => {
+    (button as HTMLButtonElement).click()
+  })
 
   const sketchId = await runButton.getAttribute('data-p5code-id')
   const iframeHandle = sketchId
@@ -352,11 +358,17 @@ test('Run buttons route to the correct iframe when two P5Code sketches share a s
   expect(firstFrame).toBeTruthy()
   expect(secondFrame).toBeTruthy()
 
-  await firstRunButton.click()
+  await firstRunButton.focus()
+  await firstRunButton.evaluate((button) => {
+    (button as HTMLButtonElement).click()
+  })
   const firstCanvas = await waitForP5CanvasInFrame(firstFrame!, 20_000)
   expect(firstCanvas).toBeTruthy()
 
-  await secondRunButton.click()
+  await secondRunButton.focus()
+  await secondRunButton.evaluate((button) => {
+    (button as HTMLButtonElement).click()
+  })
   const secondCanvas = await waitForP5CanvasInFrame(secondFrame!, 20_000)
   expect(secondCanvas).toBeTruthy()
 

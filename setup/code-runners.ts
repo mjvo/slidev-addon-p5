@@ -653,6 +653,10 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
   const customJs: NonNullable<RunnerType['js']> = async (code: string, ctx: unknown) => {
     // Detect p5.js code using AST signals (with regex fallback on parse failures).
     const looksLikeP5 = isLikelyP5Sketch(code);
+    const runnerContext = ctx as Partial<JsRunnerCtx> | null;
+    const requestedSketchId = typeof runnerContext?.options?.sketchInstanceId === 'string'
+      ? runnerContext.options.sketchInstanceId
+      : null;
     
     // Track transpiled code for error mapping
     let transpiled: string | null = null;
@@ -671,7 +675,12 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
     // Note: addon is iframe-first; DOM fallback has been removed.
     try {
       // **CRITICAL**: Capture the play button BEFORE p5 execution
-      const sourcePlayButton = findSourcePlayButton(document.activeElement as HTMLElement);
+      let sourcePlayButton = requestedSketchId
+        ? document.querySelector(`[data-p5code-id="${requestedSketchId}"] button.slidev-icon-btn[title="Run code"], [data-p5code-id="${requestedSketchId}"] button[title="Run code"]`) as HTMLElement | null
+        : null;
+      if (!sourcePlayButton) {
+        sourcePlayButton = findSourcePlayButton(document.activeElement as HTMLElement);
+      }
       // Instrument user code to guard against infinite loops.
       const codeToTranspile = instrumentLoops(code, {
         timeoutMs: TIMING_CONFIG.loopGuardTimeoutMs,
@@ -685,11 +694,20 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
       }
       // Try to find P5Canvas/P5Code wrapper and use its container or iframe
       // Try to find the correct P5Code iframe by UUID, prioritizing Monaco context if available
-      let iframeElement: HTMLIFrameElement | null = null;
-      let codeId = null;
+      let iframeElement: HTMLIFrameElement | null = requestedSketchId
+        ? document.querySelector(`iframe[data-p5code-id="${requestedSketchId}"]`)
+        : null;
+      let codeId = requestedSketchId;
+      if ((!codeId || !iframeElement) && sourcePlayButton?.closest) {
+        const codeIdEl = sourcePlayButton.closest('[data-p5code-id]') as HTMLElement | null;
+        if (codeIdEl) {
+          codeId = codeIdEl.getAttribute('data-p5code-id');
+          iframeElement = document.querySelector(`iframe[data-p5code-id="${codeId}"]`);
+        }
+      }
       // Always use the closest data-p5code-id to the play/run button or code block
       const playBtn = document.activeElement as HTMLElement | null;
-      if (playBtn && playBtn.closest) {
+      if ((!codeId || !iframeElement) && playBtn && playBtn.closest) {
         const codeIdEl = playBtn.closest('[data-p5code-id]') as HTMLElement | null;
         if (codeIdEl) {
           codeId = codeIdEl.getAttribute('data-p5code-id');
@@ -697,15 +715,26 @@ export default defineCodeRunnersSetup((runner: RunnerType) => {
         }
       }
       // Fallback: try the old method (active element ancestry)
-      if (!iframeElement) {
+      if ((!codeId || !iframeElement)) {
         const codeIdEl = findClosestP5CodeIdElement(document.activeElement as HTMLElement | null);
         if (codeIdEl) {
           codeId = codeIdEl.getAttribute('data-p5code-id');
           iframeElement = document.querySelector(`iframe[data-p5code-id="${codeId}"]`);
         }
       }
-      // GUARD: If we still have no codeId or iframe, refuse to run silently
-      if (!codeId || !iframeElement) {
+      if (!iframeElement) {
+        const visibleIframes = typeof document.querySelectorAll === 'function'
+          ? Array.from(
+              document.querySelectorAll(".slidev-page:not([style*='display: none']) iframe.p5-canvas-iframe")
+            ) as HTMLIFrameElement[]
+          : [];
+        if (visibleIframes.length === 1) {
+          iframeElement = visibleIframes[0];
+          codeId = codeId || iframeElement.getAttribute('data-p5code-id');
+        }
+      }
+      // GUARD: If we still have no iframe, refuse to run silently
+      if (!iframeElement) {
         return { text: 'Error: Unable to match the Run button to a p5 iframe. Try rerendering the slide and running again.' };
       }
       // Try a final discovery for iframe if we still don't have one

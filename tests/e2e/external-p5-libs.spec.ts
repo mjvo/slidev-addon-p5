@@ -15,13 +15,24 @@ test('external-p5-libs loads a local iframe helper library', async ({ page }) =>
   const slideNo = await navigateToSlideContainingText(page, 'E2E external-p5-libs smoke')
   if (!slideNo) throw new Error('No slide found containing text: E2E external-p5-libs smoke')
 
-  const clicked = await clickRunButton(page)
+  const activeSlide = page.locator(`.slidev-page[data-slidev-no="${slideNo}"]`).first()
+  await expect(activeSlide).toBeVisible({ timeout: 10_000 })
+
+  const runButton = activeSlide.locator('button[title="Run code"]').first()
+  await expect(runButton).toBeVisible({ timeout: 10_000 })
+  const sketchId = await runButton.evaluate((button) => {
+    return button.closest('[data-p5code-id]')?.getAttribute('data-p5code-id') || button.getAttribute('data-p5code-id')
+  })
+
+  const clicked = await clickRunButton(page, sketchId)
   if (!clicked) throw new Error('No Run button found on external-p5-libs smoke slide')
 
-  const iframeHandle = await page.waitForSelector('iframe.p5-canvas-iframe:visible', { timeout: 20_000 })
+  const iframeHandle = sketchId
+    ? await page.waitForSelector(`.slidev-page[data-slidev-no="${slideNo}"] iframe.p5-canvas-iframe[data-p5code-id="${sketchId}"]`, { timeout: 20_000 })
+    : await page.waitForSelector(`.slidev-page[data-slidev-no="${slideNo}"] iframe.p5-canvas-iframe`, { timeout: 20_000 })
   expect(iframeHandle).toBeTruthy()
-  const sketchId = await iframeHandle.getAttribute('data-p5code-id')
-  await waitForP5IframeReady(page, sketchId, 20_000)
+  const effectiveSketchId = await iframeHandle.getAttribute('data-p5code-id')
+  await waitForP5IframeReady(page, effectiveSketchId, 20_000)
 
   const frame = await iframeHandle.contentFrame()
   expect(frame).toBeTruthy()

@@ -53,6 +53,19 @@ export const createIframeThemeSyncController = (options: IframeThemeSyncOptions)
   let themeObserver: MutationObserver | null = null
   let themeSyncFrame: number | null = null
 
+  const getObservedElements = (): HTMLElement[] => {
+    const elements = [
+      document.documentElement,
+      document.body,
+      options.preferredElementId ? document.getElementById(options.preferredElementId) : null,
+      options.preferredSelector ? document.querySelector(options.preferredSelector) : null,
+      document.getElementById('slide-content'),
+      document.querySelector('.slidev-page, .slidev-page-main, .slidev-page-content'),
+    ].filter((element): element is HTMLElement => element instanceof HTMLElement)
+
+    return Array.from(new Set(elements))
+  }
+
   const sync = (): void => {
     const iframeWindow = options.getWindow()
     if (!iframeWindow) return
@@ -83,11 +96,9 @@ export const createIframeThemeSyncController = (options: IframeThemeSyncOptions)
     })
     const observerOptions = {
       attributes: true,
-      attributeFilter: ['class', 'style', 'data-theme'],
     }
-    themeObserver.observe(document.documentElement, observerOptions)
-    if (document.body) {
-      themeObserver.observe(document.body, observerOptions)
+    for (const element of getObservedElements()) {
+      themeObserver.observe(element, observerOptions)
     }
   }
 

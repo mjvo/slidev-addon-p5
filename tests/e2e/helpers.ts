@@ -5,6 +5,48 @@ export async function waitForSlidevDeckReady(page: Page): Promise<void> {
   await page.waitForFunction(() => !!(window['__slidev'] || document.querySelector('.slidev-page')), { timeout: 30_000 })
 }
 
+async function closeTransientSlidevUi(page: Page): Promise<void> {
+  await page.keyboard.press('Escape').catch(() => {})
+  await page.evaluate(() => {
+    const active = document.activeElement as HTMLElement | null
+    active?.blur?.()
+  }).catch(() => {})
+}
+
+async function getVisibleSlideNo(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const visibleSlide = Array.from(document.querySelectorAll('.slidev-page'))
+      .find((element) => {
+        const htmlElement = element as HTMLElement
+        const style = window.getComputedStyle(htmlElement)
+        return style.display !== 'none' && style.visibility !== 'hidden'
+      })
+    return visibleSlide?.getAttribute('data-slidev-no') || null
+  })
+}
+
+async function goToSlide(page: Page, slideNo: string | number): Promise<string | null> {
+  const target = String(slideNo)
+  await closeTransientSlidevUi(page)
+  const origin = new URL(page.url()).origin
+  await page.goto(`${origin}/${target}`, { waitUntil: 'networkidle' })
+  await waitForSlidevDeckReady(page)
+  await closeTransientSlidevUi(page)
+  return getVisibleSlideNo(page)
+}
+
+async function getVisibleSlideText(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const visibleSlide = Array.from(document.querySelectorAll('.slidev-page'))
+      .find((element) => {
+        const htmlElement = element as HTMLElement
+        const style = window.getComputedStyle(htmlElement)
+        return style.display !== 'none' && style.visibility !== 'hidden'
+      })
+    return visibleSlide?.textContent || ''
+  })
+}
+
 export async function waitForP5CanvasInFrame(frame: Frame, timeout = 30_000) {
   try { await frame.waitForLoadState?.('load', { timeout: 10_000 }) } catch (e) { void e }
   const selectors = ['#p5-container canvas', 'canvas']
@@ -21,56 +63,73 @@ export async function waitForP5CanvasInFrame(frame: Frame, timeout = 30_000) {
 }
 
 export async function waitForP5IframeReady(page: Page, sketchInstanceId: string | null = null, timeout = 15_000) {
-  return page.evaluate(({ id, timeout }) => new Promise<boolean>((resolve) => {
-    const timer = setTimeout(() => { window.removeEventListener('message', onMessage); resolve(false) }, timeout)
-    function onMessage(ev: MessageEvent) {
-      try {
-        const d = ev.data
-        if (d && d.type === 'p5-iframe-ready' && (!id || d.sketchInstanceId === id)) {
-          window.removeEventListener('message', onMessage)
-          clearTimeout(timer)
-          resolve(true)
+  try {
+    await page.waitForFunction((id) => {
+      const selector = id
+        ? `iframe.p5-canvas-iframe[data-p5code-id="${id}"]`
+        : 'iframe.p5-canvas-iframe'
+      const iframe = document.querySelector(selector)
+      if (!(iframe instanceof HTMLIFrameElement)) {
+        return false
+      }
+      const iframeWindow = iframe.contentWindow as (Window & {
+        p5?: unknown
+        __p5Addon?: {
+          sketchInstanceId?: unknown
         }
-      } catch (e) { void e }
-    }
-    window.addEventListener('message', onMessage)
-  }), { id: sketchInstanceId, timeout })
+      }) | null
+      if (!iframeWindow) {
+        return false
+      }
+      const iframeDocument = iframeWindow.document
+      const addonSketchId = iframeWindow.__p5Addon?.sketchInstanceId
+      const hasMatchingSketchId = !id || addonSketchId === id
+      return Boolean(
+        hasMatchingSketchId
+        && iframeDocument
+        && (
+          typeof iframeWindow.p5 !== 'undefined'
+          || iframeDocument.getElementById('p5-container')
+          || iframeDocument.querySelector('canvas')
+        )
+      )
+    }, sketchInstanceId, { timeout })
+    return true
+  } catch (e) {
+    return false
+  }
 }
 
 export async function clickRunButton(page: Page, sketchInstanceId: string | null = null): Promise<boolean> {
-  try {
-    const btnHandle = await page.waitForSelector('button[title="Run code"]', { timeout: 8_000 }).catch(() => null)
-    if (btnHandle) {
-      try {
-        await btnHandle.click().catch(() => {})
-        const box = await btnHandle.boundingBox()
-        if (!box)
-          await btnHandle.click({ force: true }).catch(() => {})
-        else
-          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
-        return true
-      } catch (e) {
-        // fall through to DOM fallback below
-      }
-    }
-  } catch (e) { void e }
-
+  await closeTransientSlidevUi(page)
   const clicked = await page.evaluate((id) => {
     function dispatchClick(btn: Element) {
       try {
+        const htmlButton = btn as HTMLElement
+        htmlButton.scrollIntoView({ block: 'center', inline: 'center' })
+        htmlButton.focus?.()
         btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }))
         btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }))
-        ;(btn as HTMLElement).click()
+        htmlButton.click()
         return true
       } catch (e) {
         try { (btn as HTMLElement).click(); return true } catch { return false }
       }
     }
+    const visibleSlide = Array.from(document.querySelectorAll('.slidev-page'))
+      .find((element) => {
+        const htmlElement = element as HTMLElement
+        const style = window.getComputedStyle(htmlElement)
+        return style.display !== 'none' && style.visibility !== 'hidden'
+      })
+
     if (id) {
-      const b = document.querySelector(`button[title="Run code"][data-p5code-id="${id}"]`)
-      if (b) return dispatchClick(b)
+      const scopedButton = visibleSlide?.querySelector(`[data-p5code-id="${id}"] button[title="Run code"], button[title="Run code"][data-p5code-id="${id}"]`)
+      if (scopedButton) return dispatchClick(scopedButton)
+      const globalButton = document.querySelector(`[data-p5code-id="${id}"] button[title="Run code"], button[title="Run code"][data-p5code-id="${id}"]`)
+      if (globalButton) return dispatchClick(globalButton)
     }
-    const candidates = Array.from(document.querySelectorAll('button, [role="button"], .slidev-icon-btn'))
+    const candidates = Array.from(visibleSlide?.querySelectorAll('button, [role="button"], .slidev-icon-btn') || [])
     for (const el of candidates) {
       const text = (el.textContent || '').trim().toLowerCase()
       const title = (el.getAttribute && el.getAttribute('title') || '') as string
@@ -79,11 +138,6 @@ export async function clickRunButton(page: Page, sketchInstanceId: string | null
         if (dispatchClick(el)) return true
       }
     }
-    const slides = Array.from(document.querySelectorAll('.slidev-page'))
-    for (const s of slides) {
-      const b = s.querySelector('button[title="Run code"]') || s.querySelector('button')
-      if (b && dispatchClick(b)) return true
-    }
     return false
   }, sketchInstanceId)
   return !!clicked
@@ -91,50 +145,37 @@ export async function clickRunButton(page: Page, sketchInstanceId: string | null
 
 export async function navigateToFirstP5CodeSlide(page: Page): Promise<string | null> {
   await page.waitForFunction(() => typeof window !== 'undefined', { timeout: 20_000 })
-  const targetSlideNo = await page.evaluate(() => {
-    const el = document.querySelector('[data-p5code-id]') as HTMLElement | null
-    return el?.closest('.slidev-page')?.getAttribute('data-slidev-no') || null
-  })
-  if (!targetSlideNo) return null
-
-  await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
-  try {
-    await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']:not([style*="display: none"])`, { timeout: 30_000 })
-  } catch (e) {
-    // Allow fallback behavior if the target slide does not become visible in time
+  for (let slideNo = 1; slideNo <= 200; slideNo++) {
+    const visibleSlideNo = await goToSlide(page, slideNo)
+    if (slideNo > 1 && visibleSlideNo !== String(slideNo)) {
+      break
+    }
+    const hasRunnableCode = await page.evaluate(() => {
+      const visibleSlide = Array.from(document.querySelectorAll('.slidev-page'))
+        .find((element) => {
+          const htmlElement = element as HTMLElement
+          const style = window.getComputedStyle(htmlElement)
+          return style.display !== 'none' && style.visibility !== 'hidden'
+        })
+      return !!visibleSlide?.querySelector('button[title="Run code"]')
+    })
+    if (hasRunnableCode) {
+      return String(slideNo)
+    }
   }
-  return targetSlideNo
+  return null
 }
 
 export async function navigateToSlideContainingText(page: Page, text: string): Promise<string | null> {
-  await page.waitForFunction((target) => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const value = walker.currentNode.textContent || ''
-      if (value.includes(target))
-        return true
+  for (let slideNo = 1; slideNo <= 200; slideNo++) {
+    const visibleSlideNo = await goToSlide(page, slideNo)
+    if (slideNo > 1 && visibleSlideNo !== String(slideNo)) {
+      break
     }
-    return false
-  }, text, { timeout: 20_000 })
-
-  const targetSlideNo = await page.evaluate((target) => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
-    while (walker.nextNode()) {
-      const value = walker.currentNode.textContent || ''
-      if (!value.includes(target))
-        continue
-      const el = walker.currentNode.parentElement
-      const slideNo = el?.closest('.slidev-page')?.getAttribute('data-slidev-no')
-      if (slideNo)
-        return slideNo
+    const visibleText = await getVisibleSlideText(page)
+    if (visibleText.includes(text)) {
+      return String(slideNo)
     }
-    return null
-  }, text)
-
-  if (!targetSlideNo)
-    return null
-
-  await page.evaluate((n) => { location.href = `${location.origin}/${n}` }, targetSlideNo)
-  await page.waitForSelector(`.slidev-page[data-slidev-no='${targetSlideNo}']:not([style*="display: none"]), .slidev-page[data-slidev-no='${targetSlideNo}']`, { timeout: 30_000 })
-  return targetSlideNo
+  }
+  return null
 }
