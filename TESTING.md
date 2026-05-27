@@ -20,13 +20,19 @@ NPM scripts
 
 Quick commands
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run lint
 pnpm run test:unit
 pnpm exec playwright install --with-deps
 pnpm run test:e2e
 pnpm run test:all
 ```
+
+Dependency and release verification
+- Keep `pnpm-lock.yaml` committed and use `pnpm install --frozen-lockfile` when validating the checked-in dependency graph.
+- Use a non-frozen install only for an intentional dependency update, then review the `package.json` and `pnpm-lock.yaml` diff together.
+- For a patch release, reject unrelated broad lockfile churn unless it is separately scoped and validated as dependency maintenance.
+- Before release, run a frozen-lockfile install followed by lint, typecheck, unit tests, package-content verification, demo build, and E2E coverage.
 
 Playwright notes
 - Playwright config: `playwright.config.ts` uses `testDir: 'tests/e2e'` and runs E2E tests serially by default (`fullyParallel: false`, `workers: 1`) to avoid shared-server interference. You can change `workers` if you isolate the server per worker.
@@ -59,4 +65,4 @@ Debugging tips
 - Use the helper commands in tests like `waitForP5IframeReady` (tests include a `p5-iframe-ready` postMessage handshake) to wait for iframe initialization in your debugging flow.
 
 CI
-- CI should run frozen-lockfile install, lint, typecheck, unit tests, Playwright E2E, package-content verification, and demo build smoke coverage. Ensure Playwright browsers are installed in CI using `pnpm exec playwright install --with-deps` or the platform-specific installer used by your CI environment.
+- CI runs frozen-lockfile install, lint, typecheck, unit tests, Playwright E2E, package-content verification, and demo build smoke coverage. Ensure Playwright browsers are installed in CI using `pnpm exec playwright install --with-deps` or the platform-specific installer used by your CI environment.

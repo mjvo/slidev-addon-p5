@@ -8,10 +8,10 @@ Reporting an issue
 - Attach Playwright trace.zip and video.webm if you ran E2E locally.
 
 Running tests locally
-- Install dependencies:
+- Install the dependency graph recorded in `pnpm-lock.yaml`:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 - Lint:
@@ -50,6 +50,13 @@ Contributor guardrails
 - Iframe postMessage payloads should include `sketchInstanceId`, and handlers should remain scoped by source window + sketch ID.
 - If you change message contracts (`p5-iframe-ready`, `p5-resize`, `p5-error`), update both component/runtime code and corresponding E2E tests in `tests/e2e/`.
 
+Dependency updates
+- Keep `pnpm-lock.yaml` committed. It records the transitive dependency versions used by development, CI, and demo verification.
+- Use `pnpm install --frozen-lockfile` for ordinary development verification and release checks. Use a non-frozen install only when intentionally changing dependency resolution.
+- When updating a dependency, inspect both `package.json` and `pnpm-lock.yaml` before committing. A narrow update should not silently refresh unrelated framework or tooling packages.
+- Keep patch-release dependency changes focused. If the lockfile changes a broad Slidev/Vue/Vite toolchain graph while updating one small package, isolate the requested update or defer the larger refresh to separate maintenance work.
+- For unexpected transitive changes, use `pnpm why <package>` and test the changed package behavior directly before accepting the lockfile diff.
+
 Debugging Playwright E2E failures
 - Reproduce with trace and headed mode to capture video and full trace:
 
@@ -75,5 +82,5 @@ Common issues & tips
 - When adding new E2E tests, prefer using the existing helpers (`clickRunButton`, `waitForP5CanvasInFrame`) to reduce flakiness.
 
 CI notes
-- The repository includes a GitHub Actions workflow at `.github/workflows/ci.yml` that runs lint, typecheck, unit tests, Playwright E2E, package-content verification, and a demo build smoke check on pushes and PRs.
+- The repository includes a GitHub Actions workflow at `.github/workflows/ci.yml` that installs with `--frozen-lockfile`, then runs lint, typecheck, unit tests, Playwright E2E, package-content verification, and a demo build smoke check on pushes and PRs.
 - On failure, the workflow uploads Playwright artifacts found under `test-results/` to the run as an artifact for offline inspection.

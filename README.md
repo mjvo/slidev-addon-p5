@@ -235,7 +235,7 @@ function draw() {
 Short workflow:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run lint
 pnpm run test:unit
 pnpm exec playwright install --with-deps
