@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.9 - Unreleased
+
+### Fixed
+- Changed `<P5Canvas>` sketches to start only when their owning slide is active, so time-evolving demos begin when presented instead of running in hidden slides from initial deck load.
+- Tear down `<P5Canvas>` p5 instances and tracked p5.sound playback when navigating away, restarting the sketch cleanly if the slide is revisited.
+
+### Tests
+- Added Playwright regression coverage for inactive-slide deferral, navigation-away teardown, sound-source stopping, and restart on return.
+
 ## 1.0.8 - 2026-05-27
 
 ### Fixed

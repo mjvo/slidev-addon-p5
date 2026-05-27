@@ -1,6 +1,6 @@
 # slidev-addon-p5 Architecture
 
-Last updated: 2026-03-25
+Last updated: 2026-05-27
 
 This document describes how `slidev-addon-p5` works today.
 
@@ -43,13 +43,14 @@ Both components use iframe-based execution (DOM fallback is removed).
 
 ### 1. `P5Canvas` flow (component-managed run)
 
-1. Component mounts and creates an iframe document.
-2. p5 is loaded in the iframe via version manager URL.
+1. Component mounts and observes its owning Slidev slide without starting a hidden sketch.
+2. When the slide becomes active, the iframe document is initialized and p5 is loaded via version manager URL.
 3. Code is extracted from slot content (or `code` prop fallback).
 4. User code is instrumented by the in-repo loop guard before transpilation.
 5. Code is transpiled to instance mode.
 6. Transpiled code is injected via blob-backed `<script>` in iframe.
 7. Iframe posts resize/ready messages; parent resizes iframe and surfaces errors.
+8. When the slide becomes inactive, sound playback and the p5 instance are torn down and the iframe is reset; returning to the slide starts a new sketch instance.
 
 ### 2. `P5Code` flow (Monaco Run)
 
@@ -95,6 +96,8 @@ Typical transform:
 ## Lifecycle and Cleanup
 
 - Old p5 instances are removed before rerun.
+- `P5Canvas` starts only while its owning slide is active and restarts from initial state after leaving and returning to that slide.
+- Leaving a `P5Canvas` slide stops tracked p5.sound sources before its iframe runtime is reset.
 - Iframe container content is reset between executions.
 - Parent-theme changes are observed and iframe background/theme state is synced live for existing iframe documents.
 - Observer-based cleanup is deterministic per iframe run: prior cleanup observers are disconnected before new ones are registered.
@@ -128,7 +131,7 @@ Extra script loading:
 
 - Unit tests: `tests/unit` (Vitest)
 - E2E tests: `tests/e2e` (Playwright)
-- CI workflow: `.github/workflows/ci.yml` runs lint + unit + E2E
+- CI workflow: `.github/workflows/ci.yml` runs lint, typecheck, unit and E2E tests, package-content verification, and a demo build.
 
 ## Current Constraints
 

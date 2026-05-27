@@ -62,6 +62,9 @@ const iframeAllow = SECURITY_CONFIG.iframeAllow
 let resizeHandler: IframeResizeHandler | null = null
 let messageHandler: IframeMessageHandler | null = null
 let messageHandlerFn: ((event: MessageEvent) => void) | null = null
+let slideVisibilityObserver: MutationObserver | null = null
+let lifecycleToken = 0
+let isActive = false
 const iframeLogs = ref<P5IframeLogEntry[]>([])
 const sketchInstanceId = ref<string>(createSketchId())
 const allowedMessageOrigins = getAllowedMessageOrigins()
@@ -78,11 +81,11 @@ const wrapperStyle = computed(() => ({
   minHeight: '400px',
 }))
 
-async function initializeIframe() {
-  if (!iframeElement.value) return
+async function initializeIframe(token: number): Promise<boolean> {
+  if (!iframeElement.value) return false
   resetIframePresentation(iframeElement.value, { clearMinWidth: true })
   sketchInstanceId.value = createSketchId()
-  iframeWindow.value = await resetP5Iframe({
+  const nextIframeWindow = await resetP5Iframe({
     iframe: iframeElement.value as HTMLIFrameElement & { __baseHtml?: string },
     sketchInstanceId: sketchInstanceId.value,
     version: props.p5Version,
@@ -96,6 +99,9 @@ async function initializeIframe() {
     requirePositiveCanvasSize: true,
     includeThemeOnAddon: true,
   })
+  if (!isActive || token !== lifecycleToken) return false
+  iframeWindow.value = nextIframeWindow
+  return Boolean(nextIframeWindow)
 }
 
 // Message routing will be handled by `IframeMessageHandler` instance registered below.
@@ -165,8 +171,8 @@ function extractCodeFromSlot(): string | null {
   return null
 }
 
-async function runP5Sketch() {
-  if (!iframeWindow.value) {
+async function runP5Sketch(token: number = lifecycleToken) {
+  if (!isActive || token !== lifecycleToken || !iframeWindow.value || !iframeElement.value) {
     return
   }
   stopP5SoundPlayback(iframeWindow.value)
@@ -177,7 +183,7 @@ async function runP5Sketch() {
       void 0
     }
   }
-  iframeWindow.value = await resetP5Iframe({
+  const nextIframeWindow = await resetP5Iframe({
     iframe: iframeElement.value as HTMLIFrameElement & { __baseHtml?: string },
     sketchInstanceId: sketchInstanceId.value,
     version: props.p5Version,
@@ -191,6 +197,8 @@ async function runP5Sketch() {
     requirePositiveCanvasSize: true,
     includeThemeOnAddon: true,
   })
+  if (!isActive || token !== lifecycleToken) return
+  iframeWindow.value = nextIframeWindow
   if (!iframeWindow.value) return
   // Reset iframe size styles before running new sketch
   resetIframePresentation(iframeElement.value, { clearMinWidth: true })
@@ -254,8 +262,70 @@ async function runP5Sketch() {
         }
       })
     } catch (e) {
-      errorMessage.value = String(e)
+      if (isActive && token === lifecycleToken) {
+        errorMessage.value = String(e)
+      }
     }
+}
+
+function teardownP5Sketch() {
+  lifecycleToken += 1
+  stopP5SoundPlayback(iframeWindow.value)
+  if (iframeWindow.value?.p5?.instance) {
+    try {
+      safeRemoveP5(iframeWindow.value.p5.instance)
+    } catch (e) {
+      void 0
+    }
+  }
+  iframeWindow.value = null
+  if (iframeElement.value) {
+    const iframe = iframeElement.value as HTMLIFrameElement & { __baseHtml?: string }
+    iframe.__baseHtml = undefined
+    iframe.srcdoc = '<!DOCTYPE html><html><body></body></html>'
+  }
+}
+
+function isOwningSlideActive(): boolean {
+  const slide = iframeElement.value?.closest('.slidev-page') as HTMLElement | null
+  if (!slide) return true
+  const style = window.getComputedStyle(slide)
+  return style.display !== 'none' && style.visibility !== 'hidden'
+}
+
+function syncSlideActivity() {
+  const nextActive = isOwningSlideActive()
+  if (nextActive === isActive) return
+  isActive = nextActive
+  if (!nextActive) {
+    teardownP5Sketch()
+    return
+  }
+
+  const token = ++lifecycleToken
+  void initializeIframe(token)
+    .then((ready) => {
+      if (ready) return runP5Sketch(token)
+    })
+    .catch((error: unknown) => {
+      if (!isActive || token !== lifecycleToken) return
+      const msg = (error as { message?: unknown } | null)?.message
+      errorMessage.value = typeof msg === 'string' ? msg : String(error)
+    })
+}
+
+function observeOwningSlideActivity() {
+  const slide = iframeElement.value?.closest('.slidev-page') as HTMLElement | null
+  if (slide) {
+    slideVisibilityObserver = new MutationObserver(() => {
+      syncSlideActivity()
+    })
+    slideVisibilityObserver.observe(slide, {
+      attributes: true,
+      attributeFilter: ['style', 'class', 'hidden'],
+    })
+  }
+  syncSlideActivity()
 }
 
 onMounted(() => {
@@ -309,24 +379,15 @@ onMounted(() => {
     } catch (e) {
       void 0
     }
-    void initializeIframe()
-      .then(() => runP5Sketch())
-      .catch((error: unknown) => {
-        const msg = (error as { message?: unknown } | null)?.message
-        errorMessage.value = typeof msg === 'string' ? msg : String(error)
-      })
+    observeOwningSlideActivity()
   })
 })
 
 onBeforeUnmount(() => {
-  stopP5SoundPlayback(iframeWindow.value)
-  if (iframeWindow.value?.p5?.instance) {
-    try {
-      safeRemoveP5(iframeWindow.value.p5.instance)
-    } catch (e) {
-      void 0
-    }
-  }
+  isActive = false
+  teardownP5Sketch()
+  slideVisibilityObserver?.disconnect()
+  slideVisibilityObserver = null
   themeSync.stop()
   if (resizeHandler) resizeHandler.stop()
   if (messageHandlerFn) {
@@ -341,7 +402,9 @@ onUpdated(() => {
   const newCode = extractCodeFromSlot()
   if (newCode && newCode !== slotCode.value) {
     slotCode.value = newCode
-    runP5Sketch()
+    if (isActive) {
+      runP5Sketch()
+    }
   }
 })
 </script>

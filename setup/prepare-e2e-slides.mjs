@@ -88,6 +88,28 @@ function draw() {
 
 ---
 
+## E2E P5Canvas lifecycle smoke
+
+<P5Canvas>
+\`\`\`js
+function setup() {
+  createCanvas(180, 100);
+  window.parent.__p5CanvasLifecycleStarts = (window.parent.__p5CanvasLifecycleStarts || 0) + 1;
+  window.p5.soundOut = {
+    soundArray: [{
+      stop() {
+        window.parent.__p5CanvasLifecycleStops = (window.parent.__p5CanvasLifecycleStops || 0) + 1;
+      },
+      disconnect() {}
+    }]
+  };
+  noLoop();
+}
+\`\`\`
+</P5Canvas>
+
+---
+
 ## E2E multi sketch routing smoke
 
 <P5Code>

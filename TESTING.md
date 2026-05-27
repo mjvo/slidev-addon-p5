@@ -11,6 +11,7 @@ Test layout
   - `tests/e2e/p5-runner-e2e.spec.ts` includes delayed-iframe-p5-load first-run coverage.
   - `tests/e2e/p5-runner-e2e.spec.ts` also includes a compatibility check asserting that a plain Monaco JavaScript block still prints to Slidev's standard runner output with the addon installed.
   - `tests/e2e/p5-runner-e2e.spec.ts` covers iframe keyboard focus, theme background sync, and routing when two `<P5Code>` sketches share one slide.
+  - `tests/e2e/p5-canvas-lifecycle.spec.ts` covers `<P5Canvas>` activation-only startup, navigation teardown, sound stopping, and restart on return.
   - `tests/e2e/error-ui.spec.ts` validates iframe `p5-error` messages surface in UI.
 
 NPM scripts

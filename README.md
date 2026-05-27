@@ -61,6 +61,10 @@ function draw() {
 </P5Canvas>
 ````
 
+`<P5Canvas>` starts its sketch when the containing slide becomes active. Navigating
+away tears down the running sketch and stops tracked p5.sound playback; navigating
+back starts the sketch again from its initial state.
+
 ### `<P5Code>` (interactive Monaco + preview)
 
 Use Slidev Monaco runner attributes so a Run button is available:
