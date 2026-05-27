@@ -1,6 +1,6 @@
 {
   "name": "slidev-addon-p5",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "p5.js integration for Slidev with auto-detection, instance mode transpilation, and accurate mouse tracking",
   "keywords": [
     "slidev-addon",

@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## 1.0.9 - Unreleased
+## 1.0.9 - 2026-05-27
 
 ### Fixed
 - Changed `<P5Canvas>` sketches to start only when their owning slide is active, so time-evolving demos begin when presented instead of running in hidden slides from initial deck load.
