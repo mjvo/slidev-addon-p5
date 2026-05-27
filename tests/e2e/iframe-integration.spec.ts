@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import {
   clickRunButton,
-  navigateToFirstP5CodeSlide,
+  navigateToSlideContainingText,
   waitForP5CanvasInFrame,
   waitForP5IframeReady,
   waitForSlidevDeckReady,
@@ -18,7 +18,7 @@ test('Run button creates iframe and canvas (integration)', async ({ page }) => {
     return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
   }, { timeout: 20_000 })
   await page.click('body')
-  await navigateToFirstP5CodeSlide(page)
+  await navigateToSlideContainingText(page, 'instantiate the sketch in the iframe on the right')
 
   const activeSlide = page.locator(".slidev-page:not([style*='display: none'])").filter({
     has: page.locator('button[title="Run code"]'),

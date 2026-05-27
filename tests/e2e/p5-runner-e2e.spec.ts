@@ -1,7 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import {
   clickRunButton,
-  navigateToFirstP5CodeSlide,
   navigateToSlideContainingText,
   waitForP5CanvasInFrame,
   waitForP5IframeReady,
@@ -9,6 +8,8 @@ import {
 } from './helpers'
 
 test.setTimeout(90_000)
+
+const primaryP5CodeSlideText = 'instantiate the sketch in the iframe on the right'
 
 async function setMonacoCode(page: Page, code: string): Promise<boolean> {
   return page.evaluate((nextCode) => {
@@ -39,6 +40,15 @@ async function getRunButtonSketchId(runButton: ReturnType<Page['locator']>): Pro
   })
 }
 
+async function navigateToPrimaryP5CodeSlide(page: Page) {
+  await navigateToSlideContainingText(page, primaryP5CodeSlideText)
+  const activeSlide = page.locator(".slidev-page:not([style*='display: none'])").filter({
+    hasText: primaryP5CodeSlideText,
+  }).first()
+  await expect(activeSlide).toBeVisible({ timeout: 10_000 })
+  return activeSlide
+}
+
 // Verifies that clicking Run inserts a stop button, renders a canvas inside
 // the mapped iframe, and that the iframe's size reflects the canvas.
 test('Run inserts stop button and iframe resizes', async ({ page }) => {
@@ -50,15 +60,13 @@ test('Run inserts stop button and iframe resizes', async ({ page }) => {
   }, { timeout: 20_000 })
   await page.click('body')
 
-  // Navigate directly to the first slide that contains p5 code
-  await navigateToFirstP5CodeSlide(page)
+  const activeSlide = await navigateToPrimaryP5CodeSlide(page)
 
-  // Prefer a visible Run button, but fall back to the first Run button and force-click it
-  // Try robust Run click helper (handles Playwright visibility flakiness)
-  const clicked = await clickRunButton(page)
+  const runButton = activeSlide.locator('button[title="Run code"]').first()
+  await expect(runButton).toBeVisible({ timeout: 10_000 })
+  const id = await getRunButtonSketchId(runButton)
+  const clicked = await clickRunButton(page, id)
   if (!clicked) throw new Error('No Run button found on page')
-  // Attempt to discover iframe that should be created by the run
-  const id = await getRunButtonSketchId(page.locator('button[title="Run code"]').first())
 
   // Stop button should appear next to the play button
   const stopBtn = page.locator('.p5-stop-btn')
@@ -114,12 +122,14 @@ test('first Run succeeds when iframe p5 load is delayed', async ({ page }) => {
     return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
   }, { timeout: 20_000 })
   await page.click('body')
-  await navigateToFirstP5CodeSlide(page)
+  const activeSlide = await navigateToPrimaryP5CodeSlide(page)
 
-  const clicked = await clickRunButton(page)
+  const runButton = activeSlide.locator('button[title="Run code"]').first()
+  await expect(runButton).toBeVisible({ timeout: 10_000 })
+  const id = await getRunButtonSketchId(runButton)
+  const clicked = await clickRunButton(page, id)
   if (!clicked) throw new Error('No Run button found on page')
 
-  const id = await getRunButtonSketchId(page.locator('button[title="Run code"]').first())
   const iframeHandle = id
     ? await page.waitForSelector(`iframe.p5-canvas-iframe[data-p5code-id="${id}"]:visible`, { timeout: 20_000 })
     : await page.waitForSelector('iframe.p5-canvas-iframe:visible', { timeout: 20_000 })
@@ -140,7 +150,7 @@ test('Run surfaces loop-guard timeout for intentional infinite loop', async ({ p
     return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
   }, { timeout: 20_000 })
   await page.click('body')
-  await navigateToFirstP5CodeSlide(page)
+  const activeSlide = await navigateToPrimaryP5CodeSlide(page)
 
   const replaced = await setMonacoCode(page, `
 function setup() {
@@ -150,7 +160,9 @@ while (true) {}
 `)
   test.skip(!replaced, 'Monaco model is not exposed in this runtime; cannot inject infinite-loop code deterministically.')
 
-  const clicked = await clickRunButton(page)
+  const runButton = activeSlide.locator('button[title="Run code"]').first()
+  await expect(runButton).toBeVisible({ timeout: 10_000 })
+  const clicked = await clickRunButton(page, await getRunButtonSketchId(runButton))
   if (!clicked) throw new Error('No Run button found on page')
 
   const err = page.locator('.p5-error-boundary .message').first()
@@ -222,15 +234,10 @@ function gradient() {
     return !!(document.querySelector('button[title="Run code"]') || document.querySelector('[data-p5code-id]'))
   }, { timeout: 20_000 })
   await page.click('body')
-  await navigateToFirstP5CodeSlide(page)
+  const activeSlide = await navigateToPrimaryP5CodeSlide(page)
 
   const replaced = await setMonacoCode(page, shaderCode)
   test.skip(!replaced, 'Monaco model is not exposed in this runtime; cannot inject shader smoke-test code deterministically.')
-
-  const activeSlide = page.locator(".slidev-page:not([style*='display: none'])").filter({
-    has: page.locator('button[title="Run code"]'),
-  }).first()
-  await expect(activeSlide).toBeVisible({ timeout: 10_000 })
 
   const runButton = activeSlide.locator('button[title="Run code"]').first()
   await expect(runButton).toBeVisible({ timeout: 10_000 })

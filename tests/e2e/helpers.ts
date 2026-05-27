@@ -138,19 +138,6 @@ export async function clickRunButton(page: Page, sketchInstanceId: string | null
   return !!clicked
 }
 
-export async function navigateToFirstP5CodeSlide(page: Page): Promise<string | null> {
-  await waitForSlidevDeckReady(page)
-  const targetSlideNo = await page.evaluate(() => {
-    const runnableSlide = Array.from(document.querySelectorAll('.slidev-page'))
-      .find((slide) => slide.querySelector('[data-p5code-id] button[title="Run code"], button[title="Run code"]'))
-    return runnableSlide?.getAttribute('data-slidev-no') || null
-  })
-  if (!targetSlideNo)
-    return null
-  await goToSlide(page, targetSlideNo)
-  return targetSlideNo
-}
-
 export async function navigateToSlideContainingText(page: Page, text: string): Promise<string | null> {
   await waitForSlidevDeckReady(page)
   await page.waitForFunction((targetText) => {
