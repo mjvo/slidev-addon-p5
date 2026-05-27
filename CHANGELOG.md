@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 - Added E2E regression coverage for iframe canvas focus after Run, live theme background syncing, and multiple `<P5Code>` sketches sharing one slide.
 - Added unit coverage for the shared iframe console/error helpers.
 - Stabilized E2E navigation, Run-button targeting, and iframe readiness waits around active-slide and sketch-instance ownership.
+- Avoided CI timeouts by locating E2E fixture slides once and waiting for active-slide readiness instead of repeated `networkidle` route scans.
 
 ### Docs
 - Clarified keyboard focus behavior and refreshed testing/CI notes to match the current validation workflow.

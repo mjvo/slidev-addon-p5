@@ -29,22 +29,17 @@ async function goToSlide(page: Page, slideNo: string | number): Promise<string |
   const target = String(slideNo)
   await closeTransientSlidevUi(page)
   const origin = new URL(page.url()).origin
-  await page.goto(`${origin}/${target}`, { waitUntil: 'networkidle' })
+  await page.goto(`${origin}/${target}`, { waitUntil: 'domcontentloaded' })
   await waitForSlidevDeckReady(page)
+  await page.waitForFunction((expectedSlideNo) => {
+    const targetSlide = document.querySelector(`.slidev-page[data-slidev-no="${expectedSlideNo}"]`)
+    if (!(targetSlide instanceof HTMLElement))
+      return false
+    const style = window.getComputedStyle(targetSlide)
+    return style.display !== 'none' && style.visibility !== 'hidden'
+  }, target, { timeout: 30_000 })
   await closeTransientSlidevUi(page)
   return getVisibleSlideNo(page)
-}
-
-async function getVisibleSlideText(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const visibleSlide = Array.from(document.querySelectorAll('.slidev-page'))
-      .find((element) => {
-        const htmlElement = element as HTMLElement
-        const style = window.getComputedStyle(htmlElement)
-        return style.display !== 'none' && style.visibility !== 'hidden'
-      })
-    return visibleSlide?.textContent || ''
-  })
 }
 
 export async function waitForP5CanvasInFrame(frame: Frame, timeout = 30_000) {
@@ -144,38 +139,31 @@ export async function clickRunButton(page: Page, sketchInstanceId: string | null
 }
 
 export async function navigateToFirstP5CodeSlide(page: Page): Promise<string | null> {
-  await page.waitForFunction(() => typeof window !== 'undefined', { timeout: 20_000 })
-  for (let slideNo = 1; slideNo <= 200; slideNo++) {
-    const visibleSlideNo = await goToSlide(page, slideNo)
-    if (slideNo > 1 && visibleSlideNo !== String(slideNo)) {
-      break
-    }
-    const hasRunnableCode = await page.evaluate(() => {
-      const visibleSlide = Array.from(document.querySelectorAll('.slidev-page'))
-        .find((element) => {
-          const htmlElement = element as HTMLElement
-          const style = window.getComputedStyle(htmlElement)
-          return style.display !== 'none' && style.visibility !== 'hidden'
-        })
-      return !!visibleSlide?.querySelector('button[title="Run code"]')
-    })
-    if (hasRunnableCode) {
-      return String(slideNo)
-    }
-  }
-  return null
+  await waitForSlidevDeckReady(page)
+  const targetSlideNo = await page.evaluate(() => {
+    const runnableSlide = Array.from(document.querySelectorAll('.slidev-page'))
+      .find((slide) => slide.querySelector('[data-p5code-id] button[title="Run code"], button[title="Run code"]'))
+    return runnableSlide?.getAttribute('data-slidev-no') || null
+  })
+  if (!targetSlideNo)
+    return null
+  await goToSlide(page, targetSlideNo)
+  return targetSlideNo
 }
 
 export async function navigateToSlideContainingText(page: Page, text: string): Promise<string | null> {
-  for (let slideNo = 1; slideNo <= 200; slideNo++) {
-    const visibleSlideNo = await goToSlide(page, slideNo)
-    if (slideNo > 1 && visibleSlideNo !== String(slideNo)) {
-      break
-    }
-    const visibleText = await getVisibleSlideText(page)
-    if (visibleText.includes(text)) {
-      return String(slideNo)
-    }
-  }
-  return null
+  await waitForSlidevDeckReady(page)
+  await page.waitForFunction((targetText) => {
+    return Array.from(document.querySelectorAll('.slidev-page'))
+      .some((slide) => (slide.textContent || '').includes(targetText))
+  }, text, { timeout: 20_000 })
+  const targetSlideNo = await page.evaluate((targetText) => {
+    const targetSlide = Array.from(document.querySelectorAll('.slidev-page'))
+      .find((slide) => (slide.textContent || '').includes(targetText))
+    return targetSlide?.getAttribute('data-slidev-no') || null
+  }, text)
+  if (!targetSlideNo)
+    return null
+  await goToSlide(page, targetSlideNo)
+  return targetSlideNo
 }
